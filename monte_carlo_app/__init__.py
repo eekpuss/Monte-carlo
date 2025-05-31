@@ -1,0 +1,1 @@
+default_app_config = 'monte_carlo_app.apps.MonteCarloAppConfig'
