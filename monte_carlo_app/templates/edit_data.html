@@ -1,0 +1,1332 @@
+{% extends 'monte_carlo_app/base.html' %}
+{% load static %}
+
+{% block title %}Edit Data - {{ session.file_name }}{% endblock %}
+
+{% block breadcrumb %}
+{{ block.super }}
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:home' %}" class="text-decoration-none">Upload</a>
+</li>
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:preview_data' session.session_id %}" class="text-decoration-none">Preview</a>
+</li>
+<li class="breadcrumb-item active">Edit Data</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .editor-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .edit-controls {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        position: sticky;
+        top: 90px;
+        z-index: 100;
+    }
+    
+    .data-editor-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .editable-table {
+        margin: 0;
+        font-size: 0.9rem;
+    }
+    
+    .editable-table th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        white-space: nowrap;
+    }
+    
+    .editable-cell {
+        position: relative;
+        cursor: pointer;
+        padding: 0.5rem;
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: all 0.3s ease;
+    }
+    
+    .editable-cell:hover {
+        background-color: #e3f2fd !important;
+        outline: 2px solid #2196f3;
+    }
+    
+    .editable-cell.editing {
+        background-color: #fff3e0 !important;
+        outline: 2px solid #ff9800;
+    }
+    
+    .editable-cell.modified {
+        background-color: #e8f5e8 !important;
+        position: relative;
+    }
+    
+    .editable-cell.modified::after {
+        content: '●';
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        color: #28a745;
+        font-size: 0.8rem;
+    }
+    
+    .missing-value {
+        background-color: #ffe6e6 !important;
+        color: #721c24;
+        font-style: italic;
+    }
+    
+    .cell-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 0.25rem;
+        font-size: inherit;
+        outline: none;
+    }
+    
+    .column-filter {
+        border-radius: 20px;
+        border: 2px solid #dee2e6;
+        padding: 0.5rem 1rem;
+        margin: 0.25rem;
+        background: white;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .column-filter:hover {
+        border-color: #007bff;
+        transform: translateY(-1px);
+    }
+    
+    .column-filter.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .bulk-actions {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid #007bff;
+    }
+    
+    .changes-summary {
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 2px solid #4caf50;
+    }
+    
+    .pagination-controls {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-top: 1px solid #dee2e6;
+        border-radius: 0 0 12px 12px;
+    }
+    
+    .search-box {
+        position: relative;
+    }
+    
+    .search-box .search-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .search-box input {
+        padding-left: 35px;
+    }
+    
+    .cell-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        min-width: 120px;
+        display: none;
+    }
+    
+    .cell-menu-item {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.3s ease;
+    }
+    
+    .cell-menu-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .cell-menu-item:last-child {
+        border-bottom: none;
+    }
+    
+    .undo-redo-controls {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .change-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #28a745;
+        margin-left: 0.5rem;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .table-scroll {
+        max-height: 600px;
+        overflow-y: auto;
+        position: relative;
+    }
+    
+    .selection-info {
+        background: #e3f2fd;
+        border-radius: 6px;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+        display: none;
+    }
+    
+    @media (max-width: 768px) {
+        .edit-controls {
+            position: relative;
+            top: auto;
+        }
+        
+        .editable-table {
+            font-size: 0.8rem;
+        }
+        
+        .editable-cell {
+            max-width: 120px;
+        }
+    }
+    
+    .quick-fill-panel {
+        background: #fff9c4;
+        border: 1px solid #fbc02d;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: none;
+    }
+    
+    .data-validation-panel {
+        background: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Editor Header -->
+<div class="editor-header">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <h3 class="mb-1">
+                <i class="bi bi-pencil-square me-2"></i>
+                Data Editor
+            </h3>
+            <p class="mb-0">{{ session.file_name }} - Page {{ page }} of {{ total_rows|div:page_size|add:1|floatformat:0 }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="d-flex justify-content-end align-items-center gap-3">
+                <div class="text-center">
+                    <div class="h5 mb-0">{{ total_rows }}</div>
+                    <small>Total Rows</small>
+                </div>
+                <div class="text-center">
+                    <div class="h5 mb-0" id="changesCount">0</div>
+                    <small>Changes Made</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Controls -->
+<div class="edit-controls">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <div class="d-flex align-items-center gap-3">
+                <!-- Search -->
+                <div class="search-box">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" class="form-control form-control-sm" placeholder="Search data..." id="searchInput">
+                </div>
+                
+                <!-- Column Filter Toggle -->
+                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#columnFilters">
+                    <i class="bi bi-funnel me-1"></i>
+                    Filters
+                </button>
+                
+                <!-- Bulk Actions Toggle -->
+                <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#bulkActions">
+                    <i class="bi bi-collection me-1"></i>
+                    Bulk Edit
+                </button>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="d-flex justify-content-end align-items-center gap-2">
+                <!-- Undo/Redo -->
+                <div class="undo-redo-controls">
+                    <button class="btn btn-outline-secondary btn-sm" id="undoBtn" disabled title="Undo">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" id="redoBtn" disabled title="Redo">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                
+                <!-- View Options -->
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-secondary btn-sm" id="highlightMissing" title="Highlight Missing Values">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" id="highlightModified" title="Highlight Modified Cells">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                </div>
+                
+                <!-- Save Status -->
+                <span class="badge bg-secondary" id="saveStatus">Not Saved</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Column Filters -->
+    <div class="collapse mt-3" id="columnFilters">
+        <div class="d-flex flex-wrap">
+            <button class="column-filter active" data-column="all">
+                <i class="bi bi-grid me-1"></i>
+                All Columns
+            </button>
+            {% for column in columns %}
+            <button class="column-filter" data-column="{{ column }}">
+                {{ column }}
+                {% if column in numeric_columns %}
+                    <span class="badge bg-success ms-1">NUM</span>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Bulk Actions -->
+    <div class="collapse mt-3" id="bulkActions">
+        <div class="bulk-actions">
+            <h6 class="mb-2">
+                <i class="bi bi-collection me-1"></i>
+                Bulk Operations
+            </h6>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="btn-group w-100" role="group">
+                        <button class="btn btn-outline-primary btn-sm" onclick="fillMissingValues()">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Fill Missing
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="clearSelection()">
+                            <i class="bi bi-eraser me-1"></i>
+                            Clear Selection
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="text" class="form-control form-control-sm" placeholder="Fill value" id="fillValue">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="fillWithValue()">
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="selection-info" id="selectionInfo">
+                <i class="bi bi-info-circle me-1"></i>
+                <span id="selectionText">No cells selected</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Changes Summary -->
+<div class="changes-summary" id="changesSummary" style="display: none;">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="mb-1">
+                <i class="bi bi-check-circle me-1"></i>
+                Changes Summary
+                <span class="change-indicator"></span>
+            </h6>
+            <small id="changesDetail">No changes made yet</small>
+        </div>
+        <button class="btn btn-outline-success btn-sm" onclick="previewChanges()">
+            <i class="bi bi-eye me-1"></i>
+            Preview Changes
+        </button>
+    </div>
+</div>
+
+<!-- Data Validation Panel -->
+<div class="data-validation-panel">
+    <h6 class="mb-2">
+        <i class="bi bi-shield-check me-1"></i>
+        Data Validation
+    </h6>
+    <div class="row">
+        <div class="col-md-3">
+            <div class="text-center">
+                <div class="h6 text-success" id="validCells">{{ total_rows|mul:columns|length|sub:session.get_total_missing_values }}</div>
+                <small class="text-muted">Valid Cells</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-center">
+                <div class="h6 text-warning" id="missingCells">{{ session.get_total_missing_values }}</div>
+                <small class="text-muted">Missing Cells</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-center">
+                <div class="h6 text-info" id="modifiedCells">0</div>
+                <small class="text-muted">Modified Cells</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-center">
+                <div class="h6 text-primary" id="errorCells">0</div>
+                <small class="text-muted">Invalid Cells</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Editor Table -->
+<div class="data-editor-container">
+    <div class="table-scroll">
+        <table class="table table-bordered editable-table" id="dataTable">
+            <thead>
+                <tr>
+                    <th style="width: 40px;">
+                        <input type="checkbox" class="form-check-input" id="selectAll">
+                    </th>
+                    <th style="width: 60px;">#</th>
+                    {% for column in columns %}
+                    <th data-column="{{ column }}">
+                        {{ column }}
+                        {% if column in numeric_columns %}
+                            <span class="badge bg-success ms-1">NUM</span>
+                        {% endif %}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr data-row="{{ forloop.counter0|add:start_idx }}">
+                    <td>
+                        <input type="checkbox" class="form-check-input row-select">
+                    </td>
+                    <td class="fw-bold text-muted">{{ forloop.counter|add:start_idx }}</td>
+                    {% for column in columns %}
+                    <td class="editable-cell" 
+                        data-row="{{ forloop.parentloop.counter0|add:start_idx }}" 
+                        data-column="{{ column }}"
+                        data-original="{{ row|lookup:column|default:'' }}"
+                        {% if row|lookup:column == '' or row|lookup:column == None %}data-missing="true"{% endif %}>
+                        {% if row|lookup:column == '' or row|lookup:column == None %}
+                            <em class="text-muted">Missing</em>
+                        {% else %}
+                            {{ row|lookup:column }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination Controls -->
+    <div class="pagination-controls">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <span class="text-muted">
+                    Showing {{ start_idx|add:1 }} to {{ end_idx }} of {{ total_rows }} rows
+                </span>
+            </div>
+            <div class="d-flex gap-2">
+                {% if has_previous %}
+                <a href="?page={{ previous_page }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-left"></i>
+                    Previous
+                </a>
+                {% endif %}
+                
+                <span class="btn btn-outline-primary btn-sm disabled">
+                    Page {{ page }}
+                </span>
+                
+                {% if has_next %}
+                <a href="?page={{ next_page }}" class="btn btn-outline-secondary btn-sm">
+                    Next
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Form for Saving Changes -->
+<form method="post" id="editForm" style="display: none;">
+    {% csrf_token %}
+    <input type="hidden" name="edited_data" id="editedData">
+    {{ form.edit_notes }}
+</form>
+
+<!-- Action Buttons -->
+<div class="d-flex justify-content-between align-items-center mt-4">
+    <div>
+        <a href="{% url 'monte_carlo_app:preview_data' session.session_id %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            Back to Preview
+        </a>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" onclick="autoSave()">
+            <i class="bi bi-cloud-upload me-1"></i>
+            Auto Save
+        </button>
+        <button class="btn btn-success" onclick="saveChanges()" id="saveBtn" disabled>
+            <i class="bi bi-check-circle me-1"></i>
+            Save Changes
+        </button>
+    </div>
+</div>
+
+<!-- Context Menu -->
+<div class="cell-menu" id="cellMenu">
+    <div class="cell-menu-item" onclick="editCell()">
+        <i class="bi bi-pencil me-1"></i>
+        Edit Cell
+    </div>
+    <div class="cell-menu-item" onclick="clearCell()">
+        <i class="bi bi-trash me-1"></i>
+        Clear Cell
+    </div>
+    <div class="cell-menu-item" onclick="fillDown()">
+        <i class="bi bi-arrow-down me-1"></i>
+        Fill Down
+    </div>
+    <div class="cell-menu-item" onclick="copyCell()">
+        <i class="bi bi-copy me-1"></i>
+        Copy Value
+    </div>
+</div>
+
+<!-- Quick Fill Modal -->
+<div class="modal fade" id="quickFillModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Quick Fill Missing Values</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Fill Method</label>
+                    <select class="form-select" id="fillMethod">
+                        <option value="mean">Mean (Numeric columns)</option>
+                        <option value="median">Median (Numeric columns)</option>
+                        <option value="mode">Most Common Value</option>
+                        <option value="forward">Forward Fill</option>
+                        <option value="backward">Backward Fill</option>
+                        <option value="custom">Custom Value</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="customValueInput" style="display: none;">
+                    <label class="form-label">Custom Value</label>
+                    <input type="text" class="form-control" id="customValue">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Apply to Columns</label>
+                    <div id="columnSelection">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="applyQuickFill()">Apply Fill</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let changes = [];
+    let undoStack = [];
+    let redoStack = [];
+    let selectedCells = [];
+    let editingCell = null;
+    
+    const dataTable = document.getElementById('dataTable');
+    const cellMenu = document.getElementById('cellMenu');
+    const saveBtn = document.getElementById('saveBtn');
+    const changesCount = document.getElementById('changesCount');
+    const changesSummary = document.getElementById('changesSummary');
+    const saveStatus = document.getElementById('saveStatus');
+    
+    // Initialize event listeners
+    initializeEventListeners();
+    
+    function initializeEventListeners() {
+        // Cell editing
+        dataTable.addEventListener('click', handleCellClick);
+        dataTable.addEventListener('contextmenu', handleCellRightClick);
+        dataTable.addEventListener('dblclick', handleCellDoubleClick);
+        
+        // Cell selection
+        dataTable.addEventListener('click', handleCellSelection);
+        
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', handleSearch);
+        
+        // Column filters
+        document.querySelectorAll('.column-filter').forEach(filter => {
+            filter.addEventListener('click', handleColumnFilter);
+        });
+        
+        // Select all functionality
+        document.getElementById('selectAll').addEventListener('change', handleSelectAll);
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', handleKeyboardShortcuts);
+        
+        // Auto-save
+        setInterval(autoSave, 30000); // Auto-save every 30 seconds
+        
+        // Hide context menu on click outside
+        document.addEventListener('click', function() {
+            cellMenu.style.display = 'none';
+        });
+        
+        // Fill method change
+        document.getElementById('fillMethod').addEventListener('change', function() {
+            const customInput = document.getElementById('customValueInput');
+            customInput.style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+    }
+    
+    function handleCellClick(e) {
+        if (e.target.classList.contains('editable-cell')) {
+            if (editingCell && editingCell !== e.target) {
+                finishEditing();
+            }
+        }
+    }
+    
+    function handleCellRightClick(e) {
+        if (e.target.classList.contains('editable-cell')) {
+            e.preventDefault();
+            showContextMenu(e, e.target);
+        }
+    }
+    
+    function handleCellDoubleClick(e) {
+        if (e.target.classList.contains('editable-cell')) {
+            startEditing(e.target);
+        }
+    }
+    
+    function handleCellSelection(e) {
+        if (e.target.classList.contains('editable-cell')) {
+            if (e.ctrlKey || e.metaKey) {
+                toggleCellSelection(e.target);
+            } else {
+                clearSelection();
+                selectCell(e.target);
+            }
+            updateSelectionInfo();
+        }
+    }
+    
+    function startEditing(cell) {
+        if (editingCell) {
+            finishEditing();
+        }
+        
+        editingCell = cell;
+        const currentValue = cell.textContent.trim();
+        const isMissing = cell.dataset.missing === 'true';
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'cell-input';
+        input.value = isMissing ? '' : currentValue;
+        
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        cell.classList.add('editing');
+        
+        input.focus();
+        input.select();
+        
+        input.addEventListener('blur', finishEditing);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                finishEditing();
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                cancelEditing();
+                e.preventDefault();
+            }
+        });
+    }
+    
+    function finishEditing() {
+        if (!editingCell) return;
+        
+        const input = editingCell.querySelector('.cell-input');
+        if (!input) return;
+        
+        const newValue = input.value.trim();
+        const originalValue = editingCell.dataset.original || '';
+        const row = editingCell.dataset.row;
+        const column = editingCell.dataset.column;
+        
+        // Update cell content
+        if (newValue === '') {
+            editingCell.innerHTML = '<em class="text-muted">Missing</em>';
+            editingCell.dataset.missing = 'true';
+            editingCell.classList.add('missing-value');
+        } else {
+            editingCell.textContent = newValue;
+            editingCell.dataset.missing = 'false';
+            editingCell.classList.remove('missing-value');
+        }
+        
+        // Track changes
+        if (newValue !== originalValue) {
+            addChange(row, column, originalValue, newValue);
+            editingCell.classList.add('modified');
+        } else {
+            editingCell.classList.remove('modified');
+            removeChange(row, column);
+        }
+        
+        editingCell.classList.remove('editing');
+        editingCell = null;
+        
+        updateChangesDisplay();
+        validateCell(editingCell, newValue);
+    }
+    
+    function cancelEditing() {
+        if (!editingCell) return;
+        
+        const originalContent = editingCell.dataset.missing === 'true' ? 
+            '<em class="text-muted">Missing</em>' : 
+            editingCell.dataset.original;
+        
+        editingCell.innerHTML = originalContent;
+        editingCell.classList.remove('editing');
+        editingCell = null;
+    }
+    
+    function addChange(row, column, oldValue, newValue) {
+        // Remove existing change for this cell
+        changes = changes.filter(change => 
+            !(change.row === row && change.column === column)
+        );
+        
+        // Add new change
+        if (oldValue !== newValue) {
+            changes.push({
+                row: parseInt(row),
+                column: column,
+                oldValue: oldValue,
+                newValue: newValue,
+                timestamp: new Date()
+            });
+            
+            // Add to undo stack
+            undoStack.push({
+                type: 'edit',
+                row: row,
+                column: column,
+                oldValue: oldValue,
+                newValue: newValue
+            });
+            
+            // Clear redo stack
+            redoStack = [];
+        }
+        
+        updateUndoRedoButtons();
+    }
+    
+    function removeChange(row, column) {
+        changes = changes.filter(change => 
+            !(change.row === parseInt(row) && change.column === column)
+        );
+    }
+    
+    function updateChangesDisplay() {
+        const count = changes.length;
+        changesCount.textContent = count;
+        
+        if (count > 0) {
+            changesSummary.style.display = 'block';
+            saveBtn.disabled = false;
+            saveStatus.textContent = 'Unsaved Changes';
+            saveStatus.className = 'badge bg-warning';
+            
+            document.getElementById('changesDetail').textContent = 
+                `${count} cell${count > 1 ? 's' : ''} modified`;
+            document.getElementById('modifiedCells').textContent = count;
+        } else {
+            changesSummary.style.display = 'none';
+            saveBtn.disabled = true;
+            saveStatus.textContent = 'All Saved';
+            saveStatus.className = 'badge bg-success';
+            document.getElementById('modifiedCells').textContent = '0';
+        }
+    }
+    
+    function showContextMenu(e, cell) {
+        cellMenu.style.display = 'block';
+        cellMenu.style.left = e.pageX + 'px';
+        cellMenu.style.top = e.pageY + 'px';
+        
+        // Store current cell for menu actions
+        window.currentCell = cell;
+    }
+    
+    function selectCell(cell) {
+        cell.classList.add('table-primary');
+        selectedCells.push(cell);
+    }
+    
+    function toggleCellSelection(cell) {
+        if (selectedCells.includes(cell)) {
+            cell.classList.remove('table-primary');
+            selectedCells = selectedCells.filter(c => c !== cell);
+        } else {
+            selectCell(cell);
+        }
+    }
+    
+    function clearSelection() {
+        selectedCells.forEach(cell => {
+            cell.classList.remove('table-primary');
+        });
+        selectedCells = [];
+    }
+    
+    function updateSelectionInfo() {
+        const selectionInfo = document.getElementById('selectionInfo');
+        const selectionText = document.getElementById('selectionText');
+        
+        if (selectedCells.length > 0) {
+            selectionInfo.style.display = 'block';
+            selectionText.textContent = `${selectedCells.length} cell${selectedCells.length > 1 ? 's' : ''} selected`;
+        } else {
+            selectionInfo.style.display = 'none';
+        }
+    }
+    
+    function handleSearch(e) {
+        const searchTerm = e.target.value.toLowerCase();
+        const rows = dataTable.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('.editable-cell');
+            let found = false;
+            
+            cells.forEach(cell => {
+                const text = cell.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    found = true;
+                    cell.classList.add('table-warning');
+                } else {
+                    cell.classList.remove('table-warning');
+                }
+            });
+            
+            row.style.display = searchTerm === '' || found ? '' : 'none';
+        });
+    }
+    
+    function handleColumnFilter(e) {
+        const column = e.target.dataset.column;
+        const filters = document.querySelectorAll('.column-filter');
+        
+        // Update filter states
+        filters.forEach(f => f.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        // Show/hide columns
+        const headers = dataTable.querySelectorAll('th');
+        const rows = dataTable.querySelectorAll('tbody tr');
+        
+        headers.forEach((header, index) => {
+            if (index < 2) return; // Skip checkbox and row number columns
+            
+            const headerColumn = header.dataset.column;
+            const shouldShow = column === 'all' || column === headerColumn;
+            
+            header.style.display = shouldShow ? '' : 'none';
+            
+            rows.forEach(row => {
+                const cell = row.children[index];
+                if (cell) {
+                    cell.style.display = shouldShow ? '' : 'none';
+                }
+            });
+        });
+    }
+    
+    function handleSelectAll(e) {
+        const isChecked = e.target.checked;
+        const rowSelects = document.querySelectorAll('.row-select');
+        
+        rowSelects.forEach(select => {
+            select.checked = isChecked;
+        });
+        
+        if (isChecked) {
+            document.querySelectorAll('.editable-cell').forEach(cell => {
+                selectCell(cell);
+            });
+        } else {
+            clearSelection();
+        }
+        
+        updateSelectionInfo();
+    }
+    
+    function handleKeyboardShortcuts(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case 's':
+                    e.preventDefault();
+                    saveChanges();
+                    break;
+                case 'z':
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        redo();
+                    } else {
+                        undo();
+                    }
+                    break;
+                case 'a':
+                    if (e.target.closest('.editable-table')) {
+                        e.preventDefault();
+                        document.getElementById('selectAll').checked = true;
+                        handleSelectAll({ target: { checked: true } });
+                    }
+                    break;
+                case 'f':
+                    e.preventDefault();
+                    document.getElementById('searchInput').focus();
+                    break;
+            }
+        } else if (e.key === 'Delete' && selectedCells.length > 0) {
+            clearSelectedCells();
+        } else if (e.key === 'Escape') {
+            clearSelection();
+            updateSelectionInfo();
+        }
+    }
+    
+    function validateCell(cell, value) {
+        const column = cell.dataset.column;
+        const isNumeric = {{ numeric_columns|safe }}.includes(column);
+        
+        cell.classList.remove('table-danger');
+        
+        if (value && isNumeric) {
+            if (isNaN(parseFloat(value))) {
+                cell.classList.add('table-danger');
+                cell.title = 'Invalid numeric value';
+                updateErrorCount(1);
+                return false;
+            }
+        }
+        
+        cell.title = '';
+        return true;
+    }
+    
+    function updateErrorCount(delta) {
+        const errorCells = document.getElementById('errorCells');
+        const current = parseInt(errorCells.textContent);
+        errorCells.textContent = Math.max(0, current + delta);
+    }
+    
+    function updateUndoRedoButtons() {
+        document.getElementById('undoBtn').disabled = undoStack.length === 0;
+        document.getElementById('redoBtn').disabled = redoStack.length === 0;
+    }
+    
+    function undo() {
+        if (undoStack.length === 0) return;
+        
+        const action = undoStack.pop();
+        redoStack.push(action);
+        
+        if (action.type === 'edit') {
+            const cell = dataTable.querySelector(`[data-row="${action.row}"][data-column="${action.column}"]`);
+            if (cell) {
+                // Restore old value
+                if (action.oldValue === '') {
+                    cell.innerHTML = '<em class="text-muted">Missing</em>';
+                    cell.dataset.missing = 'true';
+                    cell.classList.add('missing-value');
+                } else {
+                    cell.textContent = action.oldValue;
+                    cell.dataset.missing = 'false';
+                    cell.classList.remove('missing-value');
+                }
+                
+                cell.classList.remove('modified');
+                removeChange(action.row, action.column);
+            }
+        }
+        
+        updateChangesDisplay();
+        updateUndoRedoButtons();
+    }
+    
+    function redo() {
+        if (redoStack.length === 0) return;
+        
+        const action = redoStack.pop();
+        undoStack.push(action);
+        
+        if (action.type === 'edit') {
+            const cell = dataTable.querySelector(`[data-row="${action.row}"][data-column="${action.column}"]`);
+            if (cell) {
+                // Apply new value
+                if (action.newValue === '') {
+                    cell.innerHTML = '<em class="text-muted">Missing</em>';
+                    cell.dataset.missing = 'true';
+                    cell.classList.add('missing-value');
+                } else {
+                    cell.textContent = action.newValue;
+                    cell.dataset.missing = 'false';
+                    cell.classList.remove('missing-value');
+                }
+                
+                cell.classList.add('modified');
+                addChange(action.row, action.column, action.oldValue, action.newValue);
+            }
+        }
+        
+        updateChangesDisplay();
+        updateUndoRedoButtons();
+    }
+    
+    // Context menu actions
+    window.editCell = function() {
+        if (window.currentCell) {
+            startEditing(window.currentCell);
+        }
+        cellMenu.style.display = 'none';
+    };
+    
+    window.clearCell = function() {
+        if (window.currentCell) {
+            const cell = window.currentCell;
+            const oldValue = cell.dataset.original || '';
+            
+            cell.innerHTML = '<em class="text-muted">Missing</em>';
+            cell.dataset.missing = 'true';
+            cell.classList.add('missing-value');
+            cell.classList.add('modified');
+            
+            addChange(cell.dataset.row, cell.dataset.column, oldValue, '');
+            updateChangesDisplay();
+        }
+        cellMenu.style.display = 'none';
+    };
+    
+    window.fillDown = function() {
+        if (window.currentCell && selectedCells.length > 1) {
+            const value = window.currentCell.textContent.trim();
+            const isMissing = window.currentCell.dataset.missing === 'true';
+            
+            selectedCells.forEach(cell => {
+                if (cell !== window.currentCell) {
+                    const oldValue = cell.dataset.original || '';
+                    
+                    if (isMissing) {
+                        cell.innerHTML = '<em class="text-muted">Missing</em>';
+                        cell.dataset.missing = 'true';
+                        cell.classList.add('missing-value');
+                    } else {
+                        cell.textContent = value;
+                        cell.dataset.missing = 'false';
+                        cell.classList.remove('missing-value');
+                    }
+                    
+                    cell.classList.add('modified');
+                    addChange(cell.dataset.row, cell.dataset.column, oldValue, isMissing ? '' : value);
+                }
+            });
+            
+            updateChangesDisplay();
+        }
+        cellMenu.style.display = 'none';
+    };
+    
+    window.copyCell = function() {
+        if (window.currentCell) {
+            const value = window.currentCell.textContent.trim();
+            navigator.clipboard.writeText(value).then(() => {
+                showToast('Value copied to clipboard', 'success');
+            });
+        }
+        cellMenu.style.display = 'none';
+    };
+    
+    // Bulk operations
+    window.fillMissingValues = function() {
+        const modal = new bootstrap.Modal(document.getElementById('quickFillModal'));
+        
+        // Populate column selection
+        const columnSelection = document.getElementById('columnSelection');
+        columnSelection.innerHTML = '';
+        
+        {{ columns|safe }}.forEach(column => {
+            const div = document.createElement('div');
+            div.className = 'form-check';
+            div.innerHTML = `
+                <input class="form-check-input" type="checkbox" value="${column}" id="col_${column}" checked>
+                <label class="form-check-label" for="col_${column}">
+                    ${column}
+                    ${{{ numeric_columns|safe }}.includes(column) ? '<span class="badge bg-success ms-1">NUM</span>' : ''}
+                </label>
+            `;
+            columnSelection.appendChild(div);
+        });
+        
+        modal.show();
+    };
+    
+    window.clearSelection = function() {
+        clearSelection();
+        updateSelectionInfo();
+    };
+    
+    window.fillWithValue = function() {
+        const value = document.getElementById('fillValue').value;
+        if (!value || selectedCells.length === 0) return;
+        
+        selectedCells.forEach(cell => {
+            const oldValue = cell.dataset.original || '';
+            
+            cell.textContent = value;
+            cell.dataset.missing = 'false';
+            cell.classList.remove('missing-value');
+            cell.classList.add('modified');
+            
+            addChange(cell.dataset.row, cell.dataset.column, oldValue, value);
+        });
+        
+        updateChangesDisplay();
+        document.getElementById('fillValue').value = '';
+    };
+    
+    function clearSelectedCells() {
+        selectedCells.forEach(cell => {
+            const oldValue = cell.dataset.original || '';
+            
+            cell.innerHTML = '<em class="text-muted">Missing</em>';
+            cell.dataset.missing = 'true';
+            cell.classList.add('missing-value');
+            cell.classList.add('modified');
+            
+            addChange(cell.dataset.row, cell.dataset.column, oldValue, '');
+        });
+        
+        updateChangesDisplay();
+    }
+    
+    window.applyQuickFill = function() {
+        const method = document.getElementById('fillMethod').value;
+        const customValue = document.getElementById('customValue').value;
+        const selectedColumns = Array.from(document.querySelectorAll('#columnSelection input:checked')).map(cb => cb.value);
+        
+        selectedColumns.forEach(column => {
+            const cells = dataTable.querySelectorAll(`[data-column="${column}"][data-missing="true"]`);
+            let fillValue = '';
+            
+            // Calculate fill value based on method
+            if (method === 'custom') {
+                fillValue = customValue;
+            } else if (method === 'mean' || method === 'median') {
+                const values = Array.from(dataTable.querySelectorAll(`[data-column="${column}"]:not([data-missing="true"])`))
+                    .map(cell => parseFloat(cell.textContent))
+                    .filter(val => !isNaN(val));
+                
+                if (values.length > 0) {
+                    if (method === 'mean') {
+                        fillValue = (values.reduce((a, b) => a + b) / values.length).toFixed(2);
+                    } else {
+                        values.sort((a, b) => a - b);
+                        const mid = Math.floor(values.length / 2);
+                        fillValue = values.length % 2 ? values[mid] : ((values[mid - 1] + values[mid]) / 2).toFixed(2);
+                    }
+                }
+            }
+            
+            // Apply fill value
+            cells.forEach(cell => {
+                if (fillValue !== '') {
+                    const oldValue = cell.dataset.original || '';
+                    
+                    cell.textContent = fillValue;
+                    cell.dataset.missing = 'false';
+                    cell.classList.remove('missing-value');
+                    cell.classList.add('modified');
+                    
+                    addChange(cell.dataset.row, cell.dataset.column, oldValue, fillValue);
+                }
+            });
+        });
+        
+        updateChangesDisplay();
+        bootstrap.Modal.getInstance(document.getElementById('quickFillModal')).hide();
+        showToast('Quick fill applied successfully', 'success');
+    };
+    
+    // Save functions
+    window.autoSave = function() {
+        if (changes.length > 0) {
+            // Here you would typically send changes to server
+            saveStatus.textContent = 'Auto-saving...';
+            saveStatus.className = 'badge bg-info';
+            
+            // Simulate save delay
+            setTimeout(() => {
+                saveStatus.textContent = 'Auto-saved';
+                saveStatus.className = 'badge bg-secondary';
+            }, 1000);
+        }
+    };
+    
+    window.saveChanges = function() {
+        if (changes.length === 0) return;
+        
+        const editedData = JSON.stringify(changes);
+        document.getElementById('editedData').value = editedData;
+        
+        showLoading();
+        
+        // Submit form
+        const form = document.getElementById('editForm');
+        form.submit();
+    };
+    
+    window.previewChanges = function() {
+        if (changes.length === 0) return;
+        
+        const previewContent = changes.map(change => {
+            return `Row ${change.row + 1}, Column ${change.column}: "${change.oldValue}" → "${change.newValue}"`;
+        }).join('\n');
+        
+        alert('Changes Preview:\n\n' + previewContent);
+    };
+    
+    // Highlight toggles
+    document.getElementById('highlightMissing').addEventListener('click', function() {
+        const missingCells = dataTable.querySelectorAll('[data-missing="true"]');
+        const isHighlighted = this.classList.contains('active');
+        
+        missingCells.forEach(cell => {
+            if (isHighlighted) {
+                cell.classList.remove('missing-value');
+            } else {
+                cell.classList.add('missing-value');
+            }
+        });
+        
+        this.classList.toggle('active');
+    });
+    
+    document.getElementById('highlightModified').addEventListener('click', function() {
+        const modifiedCells = dataTable.querySelectorAll('.modified');
+        const isHighlighted = this.classList.contains('active');
+        
+        modifiedCells.forEach(cell => {
+            if (isHighlighted) {
+                cell.style.backgroundColor = '';
+            } else {
+                cell.style.backgroundColor = '#e8f5e8';
+            }
+        });
+        
+        this.classList.toggle('active');
+    });
+    
+    // Initialize validation counts
+    updateChangesDisplay();
+    updateUndoRedoButtons();
+});
+</script>
+{% endblock %}

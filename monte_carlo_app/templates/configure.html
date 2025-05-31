@@ -1,0 +1,1281 @@
+{% extends 'monte_carlo_app/base.html' %}
+{% load static %}
+
+{% block title %}Configure Parameters - {{ session.file_name }}{% endblock %}
+
+{% block breadcrumb %}
+{{ block.super }}
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:home' %}" class="text-decoration-none">Upload</a>
+</li>
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:preview_data' session.session_id %}" class="text-decoration-none">Preview</a>
+</li>
+<li class="breadcrumb-item active">Configure</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .config-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .config-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+        animation: float 20s infinite linear;
+        z-index: 1;
+    }
+    
+    .config-content {
+        position: relative;
+        z-index: 2;
+    }
+    
+    .wizard-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .wizard-steps {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .step-indicator {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .step {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        background: white;
+        border: 2px solid #dee2e6;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .step.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+        transform: scale(1.05);
+    }
+    
+    .step.completed {
+        background: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
+    
+    .step-number {
+        background: rgba(255,255,255,0.2);
+        color: inherit;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+    
+    .config-section {
+        padding: 2rem;
+    }
+    
+    .parameter-card {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+    
+    .parameter-card:hover {
+        border-color: #007bff;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+    
+    .parameter-card.featured {
+        border-color: #28a745;
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+    }
+    
+    .parameter-card.featured::before {
+        content: 'RECOMMENDED';
+        position: absolute;
+        top: -8px;
+        left: 1rem;
+        background: #28a745;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: bold;
+        letter-spacing: 0.5px;
+    }
+    
+    .parameter-icon {
+        font-size: 2rem;
+        color: #007bff;
+        margin-bottom: 1rem;
+    }
+    
+    .parameter-card.featured .parameter-icon {
+        color: #28a745;
+    }
+    
+    .slider-container {
+        position: relative;
+        margin: 1rem 0;
+    }
+    
+    .slider {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        background: #dee2e6;
+        outline: none;
+        opacity: 0.8;
+        transition: opacity 0.3s ease;
+    }
+    
+    .slider:hover {
+        opacity: 1;
+    }
+    
+    .slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #007bff;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .slider::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+        background: #0056b3;
+    }
+    
+    .slider-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.5rem;
+    }
+    
+    .simulation-display {
+        background: white;
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    
+    .simulation-count {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #007bff;
+        line-height: 1;
+    }
+    
+    .estimation-panel {
+        background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-left: 4px solid #ff9800;
+    }
+    
+    .method-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    
+    .method-card {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+    
+    .method-card:hover {
+        border-color: #007bff;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .method-card.selected {
+        border-color: #007bff;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    }
+    
+    .method-card.recommended {
+        border-color: #28a745;
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+    }
+    
+    .method-card.recommended::before {
+        content: '★ RECOMMENDED';
+        position: absolute;
+        top: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #28a745;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: bold;
+    }
+    
+    .method-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #007bff;
+    }
+    
+    .method-card.selected .method-icon,
+    .method-card.recommended .method-icon {
+        color: #28a745;
+    }
+    
+    .recommendations-panel {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .recommendation-item {
+        background: #e3f2fd;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 4px solid #2196f3;
+    }
+    
+    .recommendation-item.warning {
+        background: #fff3e0;
+        border-left-color: #ff9800;
+    }
+    
+    .recommendation-item.success {
+        background: #e8f5e8;
+        border-left-color: #4caf50;
+    }
+    
+    .data-summary-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .stat-item {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #007bff;
+        line-height: 1;
+    }
+    
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .preview-panel {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid #dee2e6;
+    }
+    
+    .preview-loading {
+        text-align: center;
+        padding: 2rem;
+        color: #6c757d;
+    }
+    
+    .confidence-selector {
+        display: flex;
+        gap: 0.5rem;
+        margin: 1rem 0;
+    }
+    
+    .confidence-option {
+        flex: 1;
+        padding: 0.75rem;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: white;
+    }
+    
+    .confidence-option:hover {
+        border-color: #007bff;
+    }
+    
+    .confidence-option.selected {
+        border-color: #007bff;
+        background: #007bff;
+        color: white;
+    }
+    
+    .advanced-options {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .action-buttons {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        position: sticky;
+        bottom: 20px;
+        z-index: 100;
+    }
+    
+    @keyframes float {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(-60px, -60px); }
+    }
+    
+    @media (max-width: 768px) {
+        .config-header {
+            padding: 1rem;
+        }
+        
+        .config-section {
+            padding: 1rem;
+        }
+        
+        .method-cards {
+            grid-template-columns: 1fr;
+        }
+        
+        .step-indicator {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .action-buttons {
+            position: relative;
+            bottom: auto;
+            margin-top: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Configuration Header -->
+<div class="config-header">
+    <div class="config-content">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h2 class="mb-1">
+                    <i class="bi bi-gear-wide-connected me-2"></i>
+                    Monte Carlo Configuration
+                </h2>
+                <p class="mb-0">Configure imputation parameters for optimal results</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <div class="text-center">
+                    <i class="bi bi-cpu display-4 mb-2"></i>
+                    <div class="small">Ready to Process</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Summary -->
+<div class="data-summary-card">
+    <h5 class="mb-3">
+        <i class="bi bi-graph-up text-primary me-2"></i>
+        Data Summary
+    </h5>
+    <div class="summary-stats">
+        <div class="stat-item">
+            <div class="stat-value">{{ session.total_rows }}</div>
+            <div class="stat-label">Total Rows</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ session.get_numeric_columns|length }}</div>
+            <div class="stat-label">Numeric Columns</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ session.get_total_missing_values }}</div>
+            <div class="stat-label">Missing Values</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ session.get_total_missing_values|div:session.total_rows|div:session.get_numeric_columns|length|mul:100|floatformat:1 }}%</div>
+            <div class="stat-label">Missing Rate</div>
+        </div>
+        {% if session.time_column %}
+        <div class="stat-item">
+            <div class="stat-value"><i class="bi bi-check-circle text-success"></i></div>
+            <div class="stat-label">Time-Aware</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- AI Recommendations -->
+{% if recommendations %}
+<div class="recommendations-panel">
+    <h5 class="text-primary mb-3">
+        <i class="bi bi-lightbulb me-2"></i>
+        AI Recommendations
+    </h5>
+    {% for recommendation in recommendations %}
+    <div class="recommendation-item {% if 'high' in recommendation.lower %}warning{% elif 'good' in recommendation.lower or 'low' in recommendation.lower %}success{% endif %}">
+        <i class="bi bi-info-circle me-2"></i>
+        {{ recommendation }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Configuration Wizard -->
+<div class="wizard-container">
+    <!-- Wizard Steps -->
+    <div class="wizard-steps">
+        <div class="step-indicator">
+            <div class="step active" data-step="1">
+                <div class="step-number">1</div>
+                <span>Simulations</span>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-number">2</div>
+                <span>Method</span>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-number">3</div>
+                <span>Advanced</span>
+            </div>
+            <div class="step" data-step="4">
+                <div class="step-number">4</div>
+                <span>Review</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Configuration Form -->
+    <form method="post" id="configForm">
+        {% csrf_token %}
+        
+        <div class="config-section">
+            <!-- Step 1: Number of Simulations -->
+            <div class="step-content" id="step1">
+                <h4 class="mb-4">
+                    <i class="bi bi-calculator text-primary me-2"></i>
+                    Number of Monte Carlo Simulations
+                </h4>
+                
+                <div class="parameter-card featured">
+                    <div class="parameter-icon">
+                        <i class="bi bi-speedometer2"></i>
+                    </div>
+                    <h5>Simulation Count</h5>
+                    <p class="text-muted mb-3">
+                        Higher values provide more accurate results but take longer to process.
+                        Recommended: 1000-5000 for most datasets.
+                    </p>
+                    
+                    <div class="simulation-display">
+                        <div class="simulation-count" id="simulationCount">{{ form.n_simulations.value|default:1000 }}</div>
+                        <div class="small text-muted">Monte Carlo Simulations</div>
+                    </div>
+                    
+                    <div class="slider-container">
+                        {{ form.n_simulations }}
+                        <div class="slider-labels">
+                            <span>100</span>
+                            <span>Fast</span>
+                            <span>Balanced</span>
+                            <span>Accurate</span>
+                            <span>10,000</span>
+                        </div>
+                    </div>
+                    
+                    <div class="estimation-panel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Estimated Processing Time:</strong>
+                                <div class="h5 text-warning mb-0" id="estimatedTime">~2-3 minutes</div>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Expected Accuracy:</strong>
+                                <div class="h5 text-success mb-0" id="accuracyLevel">High</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 2: Imputation Method -->
+            <div class="step-content" id="step2" style="display: none;">
+                <h4 class="mb-4">
+                    <i class="bi bi-gear text-primary me-2"></i>
+                    Imputation Strategy
+                </h4>
+                
+                <div class="method-cards">
+                    <div class="method-card recommended" data-method="adaptive">
+                        <div class="method-icon">
+                            <i class="bi bi-cpu"></i>
+                        </div>
+                        <h5>Adaptive (AI-Powered)</h5>
+                        <p class="text-muted mb-3">
+                            Context-aware imputation that adapts to data patterns.
+                            Best for complex datasets with varying patterns.
+                        </p>
+                        <div class="d-flex justify-content-between small">
+                            <span><i class="bi bi-speedometer2 text-success"></i> Speed: Medium</span>
+                            <span><i class="bi bi-award text-success"></i> Accuracy: Highest</span>
+                        </div>
+                    </div>
+                    
+                    <div class="method-card" data-method="simple">
+                        <div class="method-icon">
+                            <i class="bi bi-bar-chart"></i>
+                        </div>
+                        <h5>Simple Global</h5>
+                        <p class="text-muted mb-3">
+                            Uses overall dataset statistics for imputation.
+                            Fast and reliable for uniform data distributions.
+                        </p>
+                        <div class="d-flex justify-content-between small">
+                            <span><i class="bi bi-speedometer2 text-success"></i> Speed: Fast</span>
+                            <span><i class="bi bi-award text-warning"></i> Accuracy: Good</span>
+                        </div>
+                    </div>
+                    
+                    <div class="method-card" data-method="rolling">
+                        <div class="method-icon">
+                            <i class="bi bi-graph-up-arrow"></i>
+                        </div>
+                        <h5>Rolling Window</h5>
+                        <p class="text-muted mb-3">
+                            Uses recent data trends for imputation.
+                            Ideal for time series with evolving patterns.
+                        </p>
+                        <div class="d-flex justify-content-between small">
+                            <span><i class="bi bi-speedometer2 text-warning"></i> Speed: Medium</span>
+                            <span><i class="bi bi-award text-info"></i> Accuracy: High</span>
+                        </div>
+                    </div>
+                    
+                    <div class="method-card" data-method="interpolation">
+                        <div class="method-icon">
+                            <i class="bi bi-bezier2"></i>
+                        </div>
+                        <h5>Linear Interpolation</h5>
+                        <p class="text-muted mb-3">
+                            Interpolates between known values.
+                            Perfect for smooth, continuous time series.
+                        </p>
+                        <div class="d-flex justify-content-between small">
+                            <span><i class="bi bi-speedometer2 text-success"></i> Speed: Fast</span>
+                            <span><i class="bi bi-award text-info"></i> Accuracy: High</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="preview-panel">
+                    <h6>
+                        <i class="bi bi-eye me-1"></i>
+                        Method Preview
+                    </h6>
+                    <div id="methodPreview">
+                        <div class="preview-loading">
+                            <i class="bi bi-hourglass-split"></i>
+                            Select a method to see preview...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 3: Advanced Options -->
+            <div class="step-content" id="step3" style="display: none;">
+                <h4 class="mb-4">
+                    <i class="bi bi-sliders text-primary me-2"></i>
+                    Advanced Configuration
+                </h4>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="parameter-card">
+                            <h5>
+                                <i class="bi bi-clock me-2"></i>
+                                Data Frequency
+                            </h5>
+                            <p class="text-muted">Expected frequency of your time series data</p>
+                            {{ form.data_frequency }}
+                            {% if form.data_frequency.help_text %}
+                                <div class="form-text">{{ form.data_frequency.help_text }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="parameter-card">
+                            <h5>
+                                <i class="bi bi-shield-check me-2"></i>
+                                Confidence Level
+                            </h5>
+                            <p class="text-muted">Confidence level for quality assessment</p>
+                            <div class="confidence-selector">
+                                <div class="confidence-option" data-confidence="90">90%</div>
+                                <div class="confidence-option selected" data-confidence="95">95%</div>
+                                <div class="confidence-option" data-confidence="99">99%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="parameter-card">
+                            <h5>
+                                <i class="bi bi-graph-up me-2"></i>
+                                Quality Threshold
+                            </h5>
+                            <p class="text-muted">Minimum quality score to accept results</p>
+                            {{ form.quality_threshold }}
+                            <div class="slider-labels">
+                                <span>0.1 (Relaxed)</span>
+                                <span>1.0 (Strict)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="parameter-card">
+                            <h5>
+                                <i class="bi bi-pattern me-2"></i>
+                                Pattern Preservation
+                            </h5>
+                            <p class="text-muted">Maintain temporal patterns in imputed values</p>
+                            <div class="form-check form-switch">
+                                {{ form.preserve_patterns }}
+                                <label class="form-check-label" for="{{ form.preserve_patterns.id_for_label }}">
+                                    Enable pattern preservation
+                                </label>
+                            </div>
+                            <small class="text-muted">Recommended for time series data</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 4: Review & Summary -->
+            <div class="step-content" id="step4" style="display: none;">
+                <h4 class="mb-4">
+                    <i class="bi bi-check-circle text-primary me-2"></i>
+                    Review Configuration
+                </h4>
+                
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="parameter-card">
+                            <h5>Configuration Summary</h5>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <strong>Simulations:</strong>
+                                        <div class="text-primary" id="reviewSimulations">1000</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Method:</strong>
+                                        <div class="text-primary" id="reviewMethod">Adaptive</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Data Frequency:</strong>
+                                        <div class="text-primary" id="reviewFrequency">1 minute</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <strong>Confidence Level:</strong>
+                                        <div class="text-primary" id="reviewConfidence">95%</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Quality Threshold:</strong>
+                                        <div class="text-primary" id="reviewQuality">0.8</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Pattern Preservation:</strong>
+                                        <div class="text-primary" id="reviewPatterns">Enabled</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="parameter-card">
+                            <h5>Final Estimates</h5>
+                            <div class="text-center">
+                                <div class="mb-3">
+                                    <div class="h4 text-warning" id="finalTime">~3 minutes</div>
+                                    <small class="text-muted">Processing Time</small>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="h4 text-success" id="finalAccuracy">High</div>
+                                    <small class="text-muted">Expected Quality</small>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="h4 text-info">{{ session.get_total_missing_values }}</div>
+                                    <small class="text-muted">Values to Impute</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="parameter-card">
+                    <h5>
+                        <i class="bi bi-info-circle me-2"></i>
+                        What happens next?
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="bi bi-play-circle display-4 text-primary mb-2"></i>
+                                <h6>1. Processing</h6>
+                                <small class="text-muted">Monte Carlo simulation runs with your parameters</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="bi bi-shield-check display-4 text-success mb-2"></i>
+                                <h6>2. Validation</h6>
+                                <small class="text-muted">Quality assessment and validation of results</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="bi bi-download display-4 text-info mb-2"></i>
+                                <h6>3. Results</h6>
+                                <small class="text-muted">View, analyze, and download imputed data</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hidden form fields -->
+        <input type="hidden" name="imputation_method" id="selectedMethod" value="adaptive">
+        <input type="hidden" name="confidence_level" id="selectedConfidence" value="95">
+    </form>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a href="{% url 'monte_carlo_app:preview_data' session.session_id %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>
+                Back to Preview
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary" id="prevStep" style="display: none;">
+                <i class="bi bi-chevron-left me-1"></i>
+                Previous
+            </button>
+            <button type="button" class="btn btn-primary" id="nextStep">
+                Next Step
+                <i class="bi bi-chevron-right ms-1"></i>
+            </button>
+            <button type="submit" class="btn btn-success" id="startProcessing" style="display: none;" form="configForm">
+                <i class="bi bi-play-circle me-1"></i>
+                Start Processing
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentStep = 1;
+    const totalSteps = 4;
+    let selectedMethod = 'adaptive';
+    let selectedConfidence = 95;
+    
+    // Initialize components
+    initializeSliders();
+    initializeMethodSelection();
+    initializeConfidenceSelector();
+    initializeStepNavigation();
+    
+    function initializeSliders() {
+        const simulationSlider = document.getElementById('{{ form.n_simulations.id_for_label }}');
+        const qualitySlider = document.getElementById('{{ form.quality_threshold.id_for_label }}');
+        
+        if (simulationSlider) {
+            simulationSlider.addEventListener('input', function() {
+                updateSimulationDisplay(this.value);
+            });
+            
+            // Set slider styling
+            simulationSlider.className = 'slider';
+            simulationSlider.style.background = `linear-gradient(to right, #007bff 0%, #007bff ${(simulationSlider.value - simulationSlider.min) / (simulationSlider.max - simulationSlider.min) * 100}%, #dee2e6 ${(simulationSlider.value - simulationSlider.min) / (simulationSlider.max - simulationSlider.min) * 100}%, #dee2e6 100%)`;
+            
+            updateSimulationDisplay(simulationSlider.value);
+        }
+        
+        if (qualitySlider) {
+            qualitySlider.addEventListener('input', function() {
+                updateQualityDisplay(this.value);
+            });
+            
+            qualitySlider.className = 'slider';
+            updateQualityDisplay(qualitySlider.value);
+        }
+    }
+    
+    function updateSimulationDisplay(value) {
+        document.getElementById('simulationCount').textContent = parseInt(value).toLocaleString();
+        
+        // Update estimation
+        const estimatedMinutes = Math.max(1, Math.floor(value / 500));
+        const timeText = estimatedMinutes < 60 ? 
+            `~${estimatedMinutes} minute${estimatedMinutes > 1 ? 's' : ''}` :
+            `~${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}m`;
+        
+        document.getElementById('estimatedTime').textContent = timeText;
+        
+        // Update accuracy level
+        let accuracy = 'Medium';
+        if (value >= 5000) accuracy = 'Very High';
+        else if (value >= 2000) accuracy = 'High';
+        else if (value >= 1000) accuracy = 'Good';
+        
+        document.getElementById('accuracyLevel').textContent = accuracy;
+        
+        // Update slider background
+        const slider = document.getElementById('{{ form.n_simulations.id_for_label }}');
+        const percentage = (value - slider.min) / (slider.max - slider.min) * 100;
+        slider.style.background = `linear-gradient(to right, #007bff 0%, #007bff ${percentage}%, #dee2e6 ${percentage}%, #dee2e6 100%)`;
+    }
+    
+    function updateQualityDisplay(value) {
+        const qualitySlider = document.getElementById('{{ form.quality_threshold.id_for_label }}');
+        const percentage = (value - qualitySlider.min) / (qualitySlider.max - qualitySlider.min) * 100;
+        qualitySlider.style.background = `linear-gradient(to right, #007bff 0%, #007bff ${percentage}%, #dee2e6 ${percentage}%, #dee2e6 100%)`;
+    }
+    
+    function initializeMethodSelection() {
+        const methodCards = document.querySelectorAll('.method-card');
+        
+        methodCards.forEach(card => {
+            card.addEventListener('click', function() {
+                // Remove selection from all cards
+                methodCards.forEach(c => c.classList.remove('selected'));
+                
+                // Select current card
+                this.classList.add('selected');
+                selectedMethod = this.dataset.method;
+                document.getElementById('selectedMethod').value = selectedMethod;
+                
+                // Update preview
+                updateMethodPreview(selectedMethod);
+                
+                showToast(`Selected ${this.querySelector('h5').textContent} method`, 'success');
+            });
+        });
+        
+        // Set initial selection
+        document.querySelector('.method-card[data-method="adaptive"]').classList.add('selected');
+        updateMethodPreview('adaptive');
+    }
+    
+    function updateMethodPreview(method) {
+        const preview = document.getElementById('methodPreview');
+        
+        const descriptions = {
+            'adaptive': {
+                title: 'Adaptive Monte Carlo Imputation',
+                description: 'Uses machine learning to adapt distribution parameters based on local data context. Provides the most accurate results for complex datasets.',
+                features: ['Context-aware parameter estimation', 'Automatic pattern detection', 'Quality optimization'],
+                performance: 'Best for: Complex datasets with varying patterns'
+            },
+            'simple': {
+                title: 'Simple Global Imputation',
+                description: 'Uses overall dataset statistics (mean, standard deviation) for all missing values. Fast and reliable for uniform data.',
+                features: ['Global mean/std calculation', 'Consistent across dataset', 'Fast processing'],
+                performance: 'Best for: Uniform data distributions'
+            },
+            'rolling': {
+                title: 'Rolling Window Imputation',
+                description: 'Uses recent data trends within a sliding window. Adapts to evolving patterns in time series data.',
+                features: ['Trend-following imputation', 'Adaptive window sizing', 'Recent data emphasis'],
+                performance: 'Best for: Time series with trends'
+            },
+            'interpolation': {
+                title: 'Linear Interpolation',
+                description: 'Interpolates between known values using linear relationships. Perfect for smooth, continuous data.',
+                features: ['Linear interpolation', 'Smooth transitions', 'Temporal continuity'],
+                performance: 'Best for: Smooth time series'
+            }
+        };
+        
+        const info = descriptions[method];
+        preview.innerHTML = `
+            <h6>${info.title}</h6>
+            <p class="text-muted small">${info.description}</p>
+            <div class="row">
+                <div class="col-md-8">
+                    <strong class="small">Key Features:</strong>
+                    <ul class="small mb-0">
+                        ${info.features.map(feature => `<li>${feature}</li>`).join('')}
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <strong class="small">Recommendation:</strong>
+                    <div class="small text-success">${info.performance}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function initializeConfidenceSelector() {
+        const confidenceOptions = document.querySelectorAll('.confidence-option');
+        
+        confidenceOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                confidenceOptions.forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedConfidence = this.dataset.confidence;
+                document.getElementById('selectedConfidence').value = selectedConfidence;
+            });
+        });
+    }
+    
+    function initializeStepNavigation() {
+        const nextBtn = document.getElementById('nextStep');
+        const prevBtn = document.getElementById('prevStep');
+        const startBtn = document.getElementById('startProcessing');
+        
+        nextBtn.addEventListener('click', function() {
+            if (validateCurrentStep()) {
+                nextStep();
+            }
+        });
+        
+        prevBtn.addEventListener('click', function() {
+            previousStep();
+        });
+        
+        // Step indicator clicks
+        document.querySelectorAll('.step').forEach(step => {
+            step.addEventListener('click', function() {
+                const targetStep = parseInt(this.dataset.step);
+                if (targetStep <= currentStep || validateStepsUpTo(targetStep - 1)) {
+                    goToStep(targetStep);
+                }
+            });
+        });
+    }
+    
+    function validateCurrentStep() {
+        switch(currentStep) {
+            case 1:
+                const simulations = document.getElementById('{{ form.n_simulations.id_for_label }}').value;
+                if (simulations < 100 || simulations > 10000) {
+                    showToast('Please select a valid number of simulations (100-10,000)', 'error');
+                    return false;
+                }
+                break;
+            case 2:
+                if (!selectedMethod) {
+                    showToast('Please select an imputation method', 'error');
+                    return false;
+                }
+                break;
+            case 3:
+                // Validate advanced options
+                const quality = document.getElementById('{{ form.quality_threshold.id_for_label }}').value;
+                if (quality < 0.1 || quality > 1.0) {
+                    showToast('Quality threshold must be between 0.1 and 1.0', 'error');
+                    return false;
+                }
+                break;
+        }
+        return true;
+    }
+    
+    function validateStepsUpTo(step) {
+        for (let i = 1; i <= step; i++) {
+            const tempStep = currentStep;
+            currentStep = i;
+            if (!validateCurrentStep()) {
+                currentStep = tempStep;
+                return false;
+            }
+            currentStep = tempStep;
+        }
+        return true;
+    }
+    
+    function nextStep() {
+        if (currentStep < totalSteps) {
+            currentStep++;
+            updateStepDisplay();
+            
+            if (currentStep === totalSteps) {
+                updateReviewSummary();
+            }
+        }
+    }
+    
+    function previousStep() {
+        if (currentStep > 1) {
+            currentStep--;
+            updateStepDisplay();
+        }
+    }
+    
+    function goToStep(step) {
+        currentStep = step;
+        updateStepDisplay();
+        
+        if (currentStep === totalSteps) {
+            updateReviewSummary();
+        }
+    }
+    
+    function updateStepDisplay() {
+        // Hide all step contents
+        document.querySelectorAll('.step-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        
+        // Show current step
+        document.getElementById(`step${currentStep}`).style.display = 'block';
+        
+        // Update step indicators
+        document.querySelectorAll('.step').forEach((step, index) => {
+            step.classList.remove('active', 'completed');
+            const stepNumber = index + 1;
+            
+            if (stepNumber === currentStep) {
+                step.classList.add('active');
+            } else if (stepNumber < currentStep) {
+                step.classList.add('completed');
+            }
+        });
+        
+        // Update navigation buttons
+        const nextBtn = document.getElementById('nextStep');
+        const prevBtn = document.getElementById('prevStep');
+        const startBtn = document.getElementById('startProcessing');
+        
+        prevBtn.style.display = currentStep > 1 ? 'inline-block' : 'none';
+        nextBtn.style.display = currentStep < totalSteps ? 'inline-block' : 'none';
+        startBtn.style.display = currentStep === totalSteps ? 'inline-block' : 'none';
+        
+        // Update button text
+        if (currentStep === totalSteps) {
+            nextBtn.style.display = 'none';
+        } else {
+            nextBtn.innerHTML = `Next Step <i class="bi bi-chevron-right ms-1"></i>`;
+        }
+        
+        // Scroll to top of wizard
+        document.querySelector('.wizard-container').scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+    }
+    
+    function updateReviewSummary() {
+        const simulations = document.getElementById('{{ form.n_simulations.id_for_label }}').value;
+        const frequency = document.getElementById('{{ form.data_frequency.id_for_label }}').value;
+        const quality = document.getElementById('{{ form.quality_threshold.id_for_label }}').value;
+        const patterns = document.getElementById('{{ form.preserve_patterns.id_for_label }}').checked;
+        
+        // Update review display
+        document.getElementById('reviewSimulations').textContent = parseInt(simulations).toLocaleString();
+        document.getElementById('reviewMethod').textContent = getMethodDisplayName(selectedMethod);
+        document.getElementById('reviewFrequency').textContent = getFrequencyDisplayName(frequency);
+        document.getElementById('reviewConfidence').textContent = selectedConfidence + '%';
+        document.getElementById('reviewQuality').textContent = parseFloat(quality).toFixed(1);
+        document.getElementById('reviewPatterns').textContent = patterns ? 'Enabled' : 'Disabled';
+        
+        // Update final estimates
+        const estimatedMinutes = Math.max(1, Math.floor(simulations / 500));
+        const timeText = estimatedMinutes < 60 ? 
+            `~${estimatedMinutes} minute${estimatedMinutes > 1 ? 's' : ''}` :
+            `~${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}m`;
+        
+        document.getElementById('finalTime').textContent = timeText;
+        
+        let accuracy = 'Medium';
+        if (simulations >= 5000) accuracy = 'Very High';
+        else if (simulations >= 2000) accuracy = 'High';
+        else if (simulations >= 1000) accuracy = 'Good';
+        
+        document.getElementById('finalAccuracy').textContent = accuracy;
+    }
+    
+    function getMethodDisplayName(method) {
+        const names = {
+            'adaptive': 'Adaptive (AI-Powered)',
+            'simple': 'Simple Global',
+            'rolling': 'Rolling Window',
+            'interpolation': 'Linear Interpolation'
+        };
+        return names[method] || method;
+    }
+    
+    function getFrequencyDisplayName(freq) {
+        const frequencies = {
+            '1min': '1 Minute',
+            '5min': '5 Minutes',
+            '10min': '10 Minutes',
+            '15min': '15 Minutes',
+            '30min': '30 Minutes',
+            '1H': '1 Hour',
+            '2H': '2 Hours',
+            '6H': '6 Hours',
+            '12H': '12 Hours',
+            '1D': '1 Day',
+            '1W': '1 Week'
+        };
+        return frequencies[freq] || freq;
+    }
+    
+    // Form submission
+    document.getElementById('configForm').addEventListener('submit', function(e) {
+        if (!validateStepsUpTo(totalSteps)) {
+            e.preventDefault();
+            return;
+        }
+        
+        showLoading();
+        
+        // Add processing message
+        showToast('Starting Monte Carlo processing...', 'info');
+        
+        // Disable submit button to prevent double submission
+        document.getElementById('startProcessing').disabled = true;
+    });
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowRight' && currentStep < totalSteps) {
+            if (validateCurrentStep()) {
+                nextStep();
+            }
+        } else if (e.key === 'ArrowLeft' && currentStep > 1) {
+            previousStep();
+        }
+    });
+    
+    // Auto-save configuration
+    setInterval(function() {
+        const config = {
+            simulations: document.getElementById('{{ form.n_simulations.id_for_label }}').value,
+            method: selectedMethod,
+            confidence: selectedConfidence,
+            quality: document.getElementById('{{ form.quality_threshold.id_for_label }}').value
+        };
+        
+        sessionStorage.setItem('monteCarloConfig', JSON.stringify(config));
+    }, 5000);
+    
+    // Load saved configuration
+    const savedConfig = sessionStorage.getItem('monteCarloConfig');
+    if (savedConfig) {
+        try {
+            const config = JSON.parse(savedConfig);
+            if (config.simulations) {
+                document.getElementById('{{ form.n_simulations.id_for_label }}').value = config.simulations;
+                updateSimulationDisplay(config.simulations);
+            }
+            if (config.method) {
+                selectedMethod = config.method;
+                document.getElementById('selectedMethod').value = selectedMethod;
+            }
+            if (config.confidence) {
+                selectedConfidence = config.confidence;
+                document.getElementById('selectedConfidence').value = selectedConfidence;
+                document.querySelectorAll('.confidence-option').forEach(option => {
+                    option.classList.toggle('selected', option.dataset.confidence == selectedConfidence);
+                });
+            }
+        } catch (e) {
+            console.log('Could not load saved configuration');
+        }
+    }
+    
+    // Initialize first step
+    updateStepDisplay();
+});
+</script>
+{% endblock %}

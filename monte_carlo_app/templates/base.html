@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Monte Carlo Time Series Imputation - Advanced statistical imputation for missing time series data">
+    <meta name="author" content="Monte Carlo Team">
+    
+    <title>{% block title %}Monte Carlo Imputation{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% load static %}{% static 'monte_carlo_app/css/style.css' %}">
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Additional head content -->
+    {% block extra_head %}{% endblock %}
+    
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --success-color: #198754;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #0dcaf0;
+            --sidebar-width: 280px;
+            --header-height: 70px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bs-gray-50);
+        }
+        
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar-collapsed {
+            transform: translateX(-100%);
+        }
+        
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+        }
+        
+        .main-content.expanded {
+            margin-left: 0;
+        }
+        
+        .top-header {
+            height: var(--header-height);
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 999;
+        }
+        
+        .progress-workflow {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .step {
+            position: relative;
+            text-align: center;
+            flex: 1;
+        }
+        
+        .step-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .step.completed .step-icon {
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .step.active .step-icon {
+            background: var(--primary-color);
+            color: white;
+            transform: scale(1.1);
+        }
+        
+        .step.pending .step-icon {
+            background: var(--bs-gray-200);
+            color: var(--bs-gray-600);
+        }
+        
+        .step-connector {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: var(--bs-gray-300);
+            z-index: -1;
+        }
+        
+        .step.completed .step-connector {
+            background: var(--success-color);
+        }
+        
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border: none;
+            overflow: hidden;
+        }
+        
+        @media (max-width: 992px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="p-4">
+            <!-- Logo -->
+            <div class="text-center mb-4">
+                <h4 class="text-white fw-bold mb-0">
+                    <i class="bi bi-graph-up-arrow me-2"></i>
+                    Monte Carlo
+                </h4>
+                <small class="text-white-50">Time Series Imputation</small>
+            </div>
+            
+            <!-- Navigation Menu -->
+            <ul class="nav nav-pills flex-column">
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'upload' %}active bg-white bg-opacity-25{% endif %}" 
+                       href="{% url 'monte_carlo_app:home' %}">
+                        <i class="bi bi-cloud-upload me-2"></i>
+                        Upload Data
+                    </a>
+                </li>
+                
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'session_list' %}active bg-white bg-opacity-25{% endif %}" 
+                       href="{% url 'monte_carlo_app:session_list' %}">
+                        <i class="bi bi-list-ul me-2"></i>
+                        My Sessions
+                    </a>
+                </li>
+                
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'help' %}active bg-white bg-opacity-25{% endif %}" 
+                       href="{% url 'monte_carlo_app:help_page' %}">
+                        <i class="bi bi-question-circle me-2"></i>
+                        Help & Docs
+                    </a>
+                </li>
+                
+                <li class="nav-item mb-2">
+                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'about' %}active bg-white bg-opacity-25{% endif %}" 
+                       href="{% url 'monte_carlo_app:about_page' %}">
+                        <i class="bi bi-info-circle me-2"></i>
+                        About
+                    </a>
+                </li>
+            </ul>
+            
+            <!-- Quick Stats -->
+            <div class="mt-4 pt-4 border-top border-white border-opacity-25">
+                <h6 class="text-white-50 text-uppercase small">Quick Stats</h6>
+                <div class="text-white small">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Sessions Today:</span>
+                        <span class="fw-bold">{{ stats.today_sessions|default:0 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Total Processed:</span>
+                        <span class="fw-bold">{{ stats.total_processed|default:0 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Success Rate:</span>
+                        <span class="fw-bold">{{ stats.success_rate|default:"--" }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Theme Toggle -->
+        <div class="position-absolute bottom-0 w-100 p-3 border-top border-white border-opacity-25">
+            <button class="btn btn-outline-light btn-sm w-100" id="themeToggle">
+                <i class="bi bi-moon-stars me-2"></i>
+                <span>Dark Mode</span>
+            </button>
+        </div>
+    </nav>
+    
+    <!-- Main Content Area -->
+    <div class="main-content" id="mainContent">
+        <!-- Top Header -->
+        <header class="top-header">
+            <div class="container-fluid h-100">
+                <div class="row h-100 align-items-center">
+                    <div class="col-auto">
+                        <button class="btn btn-outline-secondary d-lg-none" id="sidebarToggle">
+                            <i class="bi bi-list"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Breadcrumb -->
+                    <div class="col">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb mb-0">
+                                {% block breadcrumb %}
+                                <li class="breadcrumb-item">
+                                    <a href="{% url 'monte_carlo_app:home' %}" class="text-decoration-none">
+                                        <i class="bi bi-house-door"></i> Home
+                                    </a>
+                                </li>
+                                {% endblock %}
+                            </ol>
+                        </nav>
+                    </div>
+                    
+                    <!-- Header Actions -->
+                    <div class="col-auto">
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- Current Time -->
+                            <small class="text-muted d-none d-md-block" id="currentTime"></small>
+                            
+                            <!-- Help Button -->
+                            <a href="{% url 'monte_carlo_app:help_page' %}" 
+                               class="btn btn-outline-secondary btn-sm" 
+                               data-bs-toggle="tooltip" 
+                               title="Get Help">
+                                <i class="bi bi-question-circle"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Workflow Progress (only show if session exists) -->
+        {% if session %}
+        <div class="container-fluid">
+            <div class="progress-workflow">
+                <div class="d-flex align-items-center">
+                    <div class="step {% if session.processing_status == 'uploaded' or session.processing_status == 'analyzed' %}active{% elif session.processing_status != 'uploaded' and session.processing_status != 'analyzed' %}completed{% else %}pending{% endif %}">
+                        <div class="step-icon">
+                            <i class="bi bi-cloud-upload"></i>
+                        </div>
+                        <div class="step-connector"></div>
+                        <small class="text-muted">Upload</small>
+                    </div>
+                    
+                    <div class="step {% if session.processing_status == 'confirmed' %}active{% elif session.is_data_confirmed %}completed{% else %}pending{% endif %}">
+                        <div class="step-icon">
+                            <i class="bi bi-eye"></i>
+                        </div>
+                        <div class="step-connector"></div>
+                        <small class="text-muted">Preview</small>
+                    </div>
+                    
+                    <div class="step {% if session.processing_status == 'configured' %}active{% elif session.processing_status == 'processing' or session.processing_status == 'completed' %}completed{% else %}pending{% endif %}">
+                        <div class="step-icon">
+                            <i class="bi bi-gear"></i>
+                        </div>
+                        <div class="step-connector"></div>
+                        <small class="text-muted">Configure</small>
+                    </div>
+                    
+                    <div class="step {% if session.processing_status == 'processing' %}active{% elif session.processing_status == 'completed' %}completed{% else %}pending{% endif %}">
+                        <div class="step-icon">
+                            <i class="bi bi-cpu"></i>
+                        </div>
+                        <div class="step-connector"></div>
+                        <small class="text-muted">Process</small>
+                    </div>
+                    
+                    <div class="step {% if session.is_processed %}completed{% else %}pending{% endif %}">
+                        <div class="step-icon">
+                            <i class="bi bi-graph-up"></i>
+                        </div>
+                        <small class="text-muted">Results</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Page Content -->
+        <main class="container-fluid py-4">
+            <!-- Messages -->
+            {% if messages %}
+                <div class="row">
+                    <div class="col-12">
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {% if message.tags == 'success' %}
+                                    <i class="bi bi-check-circle me-2"></i>
+                                {% elif message.tags == 'error' %}
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                {% elif message.tags == 'warning' %}
+                                    <i class="bi bi-exclamation-circle me-2"></i>
+                                {% else %}
+                                    <i class="bi bi-info-circle me-2"></i>
+                                {% endif %}
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Main Content Block -->
+            {% block content %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="content-card p-4">
+                        <h1>Welcome to Monte Carlo Time Series Imputation</h1>
+                        <p class="lead">Advanced statistical imputation for missing time series data using Monte Carlo simulation.</p>
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+        </main>
+        
+        <!-- Footer -->
+        <footer class="bg-white border-top py-4 mt-5">
+            <div class="container-fluid">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <small class="text-muted">
+                            © 2024 Monte Carlo Time Series Imputation. 
+                            <span class="d-none d-md-inline">Advanced statistical imputation toolkit.</span>
+                        </small>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <small class="text-muted">
+                            Version 1.0.0 | 
+                            <a href="{% url 'monte_carlo_app:help_page' %}" class="text-decoration-none">Documentation</a> |
+                            <a href="{% url 'monte_carlo_app:about_page' %}" class="text-decoration-none">About</a>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+        <!-- Toasts will be added here dynamically -->
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-none" style="z-index: 9998;">
+        <div class="d-flex align-items-center justify-content-center h-100">
+            <div class="text-center text-white">
+                <div class="spinner-border mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div>Processing your request...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="{% load static %}{% static 'monte_carlo_app/js/main.js' %}"></script>
+    
+    <script>
+        // Base template JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Sidebar toggle for mobile
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('show');
+                });
+            }
+            
+            // Close sidebar when clicking outside on mobile
+            document.addEventListener('click', function(e) {
+                if (window.innerWidth <= 992) {
+                    if (!sidebar.contains(e.target) && !sidebarToggle.contains(e.target)) {
+                        sidebar.classList.remove('show');
+                    }
+                }
+            });
+            
+            // Theme toggle
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+            
+            themeToggle.addEventListener('click', function() {
+                const currentTheme = html.getAttribute('data-bs-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                html.setAttribute('data-bs-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                
+                // Update button text
+                const icon = themeToggle.querySelector('i');
+                const text = themeToggle.querySelector('span');
+                
+                if (newTheme === 'dark') {
+                    icon.className = 'bi bi-sun me-2';
+                    text.textContent = 'Light Mode';
+                } else {
+                    icon.className = 'bi bi-moon-stars me-2';
+                    text.textContent = 'Dark Mode';
+                }
+            });
+            
+            // Load saved theme
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            html.setAttribute('data-bs-theme', savedTheme);
+            
+            if (savedTheme === 'dark') {
+                const icon = themeToggle.querySelector('i');
+                const text = themeToggle.querySelector('span');
+                icon.className = 'bi bi-sun me-2';
+                text.textContent = 'Light Mode';
+            }
+            
+            // Update current time
+            function updateTime() {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', { 
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                const currentTimeEl = document.getElementById('currentTime');
+                if (currentTimeEl) {
+                    currentTimeEl.textContent = timeString;
+                }
+            }
+            
+            updateTime();
+            setInterval(updateTime, 60000); // Update every minute
+            
+            // Auto-dismiss alerts after 5 seconds
+            setTimeout(function() {
+                const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
+                alerts.forEach(function(alert) {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            }, 5000);
+        });
+        
+        // Global functions for showing loading states
+        window.showLoading = function() {
+            document.getElementById('loadingOverlay').classList.remove('d-none');
+        };
+        
+        window.hideLoading = function() {
+            document.getElementById('loadingOverlay').classList.add('d-none');
+        };
+        
+        // Global function for showing toasts
+        window.showToast = function(message, type = 'info') {
+            const toastContainer = document.querySelector('.toast-container');
+            const toastId = 'toast-' + Date.now();
+            
+            const toastHtml = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-header">
+                        <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-2 text-${type === 'error' ? 'danger' : type}"></i>
+                        <strong class="me-auto">Notification</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toast = new bootstrap.Toast(document.getElementById(toastId));
+            toast.show();
+            
+            // Remove toast element after it's hidden
+            document.getElementById(toastId).addEventListener('hidden.bs.toast', function() {
+                this.remove();
+            });
+        };
+    </script>
+    
+    <!-- Additional page-specific scripts -->
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

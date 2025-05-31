@@ -1,0 +1,1296 @@
+{% extends 'monte_carlo_app/base.html' %}
+{% load static %}
+
+{% block title %}Results - {{ session.file_name }}{% endblock %}
+
+{% block breadcrumb %}
+{{ block.super }}
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:home' %}" class="text-decoration-none">Upload</a>
+</li>
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:preview_data' session.session_id %}" class="text-decoration-none">Preview</a>
+</li>
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:configure' session.session_id %}" class="text-decoration-none">Configure</a>
+</li>
+<li class="breadcrumb-item active">Results</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .results-header {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .results-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+        animation: float 20s infinite linear;
+        z-index: 1;
+    }
+    
+    .results-content {
+        position: relative;
+        z-index: 2;
+    }
+    
+    .success-badge {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50px;
+        padding: 0.5rem 1.5rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    
+    .summary-dashboard {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .summary-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        text-align: center;
+        transition: transform 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .summary-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .summary-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--card-color, #007bff);
+    }
+    
+    .summary-card.processing-time {
+        --card-color: #ff6b6b;
+    }
+    
+    .summary-card.imputed-values {
+        --card-color: #4ecdc4;
+    }
+    
+    .summary-card.quality-score {
+        --card-color: #45b7d1;
+    }
+    
+    .summary-card.accuracy {
+        --card-color: #96ceb4;
+    }
+    
+    .summary-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: var(--card-color, #007bff);
+    }
+    
+    .summary-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2c3e50;
+        line-height: 1;
+        margin-bottom: 0.5rem;
+    }
+    
+    .summary-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .quality-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: white;
+        border-radius: 25px;
+        padding: 0.75rem 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin: 1rem 0;
+    }
+    
+    .quality-icon {
+        font-size: 1.5rem;
+    }
+    
+    .quality-excellent {
+        color: #28a745;
+        border: 2px solid #28a745;
+    }
+    
+    .quality-good {
+        color: #17a2b8;
+        border: 2px solid #17a2b8;
+    }
+    
+    .quality-fair {
+        color: #ffc107;
+        border: 2px solid #ffc107;
+    }
+    
+    .quality-poor {
+        color: #dc3545;
+        border: 2px solid #dc3545;
+    }
+    
+    .data-tabs-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .custom-tabs {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0;
+        display: flex;
+    }
+    
+    .custom-tab {
+        flex: 1;
+        padding: 1rem;
+        border: none;
+        background: transparent;
+        color: #6c757d;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+    
+    .custom-tab:hover {
+        background: rgba(0, 123, 255, 0.1);
+        color: #007bff;
+    }
+    
+    .custom-tab.active {
+        background: white;
+        color: #007bff;
+        border-bottom: 3px solid #007bff;
+    }
+    
+    .tab-content-area {
+        padding: 1.5rem;
+    }
+    
+    .results-table {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+    
+    .results-table th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .results-table td {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .imputed-cell {
+        background-color: #e8f5e8 !important;
+        position: relative;
+        font-weight: 600;
+    }
+    
+    .imputed-cell::after {
+        content: '★';
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        color: #28a745;
+        font-size: 0.7rem;
+    }
+    
+    .original-cell {
+        background-color: #f8f9fa;
+    }
+    
+    .validation-panel {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .validation-metric {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .metric-label {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .metric-value {
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+    
+    .metric-excellent { color: #28a745; }
+    .metric-good { color: #17a2b8; }
+    .metric-fair { color: #ffc107; }
+    .metric-poor { color: #dc3545; }
+    
+    .recommendations-list {
+        list-style: none;
+        padding: 0;
+    }
+    
+    .recommendation-item {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        border-radius: 0 8px 8px 0;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        position: relative;
+    }
+    
+    .recommendation-item.success {
+        background: #e8f5e8;
+        border-left-color: #4caf50;
+    }
+    
+    .recommendation-item.warning {
+        background: #fff3e0;
+        border-left-color: #ff9800;
+    }
+    
+    .recommendation-item.error {
+        background: #ffebee;
+        border-left-color: #f44336;
+    }
+    
+    .comparison-view {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    
+    .comparison-panel {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    .comparison-panel h6 {
+        color: #495057;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+    
+    .export-actions {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .export-option {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .export-option:hover {
+        border-color: #007bff;
+        background: #e3f2fd;
+    }
+    
+    .export-option.selected {
+        border-color: #007bff;
+        background: #007bff;
+        color: white;
+    }
+    
+    .export-icon {
+        font-size: 2rem;
+        color: #007bff;
+    }
+    
+    .export-option.selected .export-icon {
+        color: white;
+    }
+    
+    .table-scroll {
+        max-height: 500px;
+        overflow-y: auto;
+        position: relative;
+    }
+    
+    .processing-info {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid #007bff;
+    }
+    
+    .action-buttons {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        padding: 1.5rem;
+        position: sticky;
+        bottom: 20px;
+        z-index: 100;
+    }
+    
+    @keyframes float {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(-60px, -60px); }
+    }
+    
+    @media (max-width: 768px) {
+        .results-header {
+            padding: 1rem;
+        }
+        
+        .summary-dashboard {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+        
+        .custom-tabs {
+            flex-direction: column;
+        }
+        
+        .comparison-view {
+            grid-template-columns: 1fr;
+        }
+        
+        .action-buttons {
+            position: relative;
+            bottom: auto;
+            margin-top: 1rem;
+        }
+    }
+    
+    .status-timeline {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .timeline-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f8f9fa;
+    }
+    
+    .timeline-item:last-child {
+        border-bottom: none;
+    }
+    
+    .timeline-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #28a745;
+        color: white;
+        font-size: 1.2rem;
+    }
+    
+    .timeline-content {
+        flex: 1;
+    }
+    
+    .timeline-title {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.25rem;
+    }
+    
+    .timeline-description {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Results Header -->
+<div class="results-header">
+    <div class="results-content">
+        <div class="success-badge">
+            <i class="bi bi-check-circle me-2"></i>
+            Processing Completed Successfully
+        </div>
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h2 class="mb-1">
+                    <i class="bi bi-graph-up-arrow me-2"></i>
+                    Monte Carlo Results
+                </h2>
+                <p class="mb-0">{{ session.file_name }} - Processed {{ result.created_at|date:"M d, Y \a\t H:i" }}</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <div class="quality-indicator quality-{{ quality_level.level|lower }}">
+                    <i class="bi bi-{{ quality_level.level|lower|default:'shield-check' }} quality-icon"></i>
+                    <div>
+                        <div class="fw-bold">{{ summary.quality_score|floatformat:3 }}</div>
+                        <small>Quality Score</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Dashboard -->
+<div class="summary-dashboard">
+    <div class="summary-card processing-time">
+        <div class="summary-icon">
+            <i class="bi bi-stopwatch"></i>
+        </div>
+        <div class="summary-value">{{ summary.processing_time|floatformat:1 }}s</div>
+        <div class="summary-label">Processing Time</div>
+    </div>
+    
+    <div class="summary-card imputed-values">
+        <div class="summary-icon">
+            <i class="bi bi-plus-circle"></i>
+        </div>
+        <div class="summary-value">{{ summary.imputed_rows }}</div>
+        <div class="summary-label">Values Imputed</div>
+    </div>
+    
+    <div class="summary-card quality-score">
+        <div class="summary-icon">
+            <i class="bi bi-shield-check"></i>
+        </div>
+        <div class="summary-value">{{ summary.quality_score|floatformat:2 }}</div>
+        <div class="summary-label">Quality Score</div>
+    </div>
+    
+    <div class="summary-card accuracy">
+        <div class="summary-icon">
+            <i class="bi bi-target"></i>
+        </div>
+        <div class="summary-value">{{ summary.imputed_percentage|floatformat:1 }}%</div>
+        <div class="summary-label">Data Completed</div>
+    </div>
+</div>
+
+<!-- Processing Information -->
+<div class="processing-info">
+    <div class="row">
+        <div class="col-md-6">
+            <h6 class="mb-2">
+                <i class="bi bi-info-circle me-1"></i>
+                Processing Configuration
+            </h6>
+            <div class="small">
+                <div><strong>Method:</strong> {{ summary.method_used|title }}</div>
+                <div><strong>Simulations:</strong> {{ summary.simulations_used|floatformat:0 }}</div>
+                <div><strong>Total Rows:</strong> {{ summary.total_rows }}</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <h6 class="mb-2">
+                <i class="bi bi-clock-history me-1"></i>
+                Performance Metrics
+            </h6>
+            <div class="small">
+                <div><strong>Processing Speed:</strong> {{ summary.total_rows|div:summary.processing_time|floatformat:0 }} rows/sec</div>
+                <div><strong>Quality Level:</strong> {{ quality_level.level }}</div>
+                <div><strong>Confidence:</strong> 95%</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Results Area -->
+    <div class="col-lg-8">
+        <!-- Data Tabs -->
+        <div class="data-tabs-container">
+            <div class="custom-tabs">
+                <button class="custom-tab active" data-tab="imputed">
+                    <i class="bi bi-graph-up me-1"></i>
+                    Imputed Data
+                </button>
+                <button class="custom-tab" data-tab="comparison">
+                    <i class="bi bi-arrows-expand me-1"></i>
+                    Before/After
+                </button>
+                <button class="custom-tab" data-tab="statistics">
+                    <i class="bi bi-bar-chart me-1"></i>
+                    Statistics
+                </button>
+            </div>
+            
+            <div class="tab-content-area">
+                <!-- Imputed Data Tab -->
+                <div class="tab-pane active" id="imputed-tab">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="bi bi-table me-2 text-primary"></i>
+                            Imputed Dataset
+                        </h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-success">{{ summary.total_rows }} rows</span>
+                            <span class="badge bg-info">{{ columns|length }} columns</span>
+                            <span class="badge bg-warning">{{ summary.imputed_rows }} imputed</span>
+                        </div>
+                    </div>
+                    
+                    <div class="table-scroll">
+                        <table class="table table-hover results-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">#</th>
+                                    {% for column in columns %}
+                                    <th>{{ column }}</th>
+                                    {% endfor %}
+                                    <th style="width: 100px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in data_preview %}
+                                <tr>
+                                    <td class="fw-bold text-muted">{{ forloop.counter }}</td>
+                                    {% for column in columns %}
+                                    <td class="{% if row.Status == 'Imputed' %}imputed-cell{% else %}original-cell{% endif %}"
+                                        title="{% if row.Status == 'Imputed' %}Imputed value{% else %}Original value{% endif %}">
+                                        {{ row|lookup:column|default:"--" }}
+                                    </td>
+                                    {% endfor %}
+                                    <td>
+                                        {% if row.Status == 'Imputed' %}
+                                            <span class="badge bg-success">Imputed</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Original</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                        <small class="text-muted">
+                            Showing first 20 rows. 
+                            <i class="bi bi-star-fill text-warning"></i> = Imputed values
+                        </small>
+                        <button class="btn btn-outline-primary btn-sm" onclick="downloadFullDataset()">
+                            <i class="bi bi-download me-1"></i>
+                            Download Full Dataset
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Comparison Tab -->
+                <div class="tab-pane" id="comparison-tab" style="display: none;">
+                    <h5 class="mb-3">
+                        <i class="bi bi-arrows-expand me-2 text-primary"></i>
+                        Before vs After Comparison
+                    </h5>
+                    
+                    <div class="comparison-view">
+                        <div class="comparison-panel">
+                            <h6>
+                                <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                                Before Imputation
+                            </h6>
+                            <div class="small">
+                                <div class="mb-2">
+                                    <strong>Missing Values:</strong> {{ session.get_total_missing_values }}
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Completeness:</strong> {{ session.total_rows|sub:session.get_total_missing_values|div:session.total_rows|mul:100|floatformat:1 }}%
+                                </div>
+                                <div>
+                                    <strong>Data Quality:</strong> 
+                                    <span class="badge bg-warning">Incomplete</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="comparison-panel">
+                            <h6>
+                                <i class="bi bi-check-circle text-success me-1"></i>
+                                After Imputation
+                            </h6>
+                            <div class="small">
+                                <div class="mb-2">
+                                    <strong>Missing Values:</strong> 0
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Completeness:</strong> 100%
+                                </div>
+                                <div>
+                                    <strong>Data Quality:</strong> 
+                                    <span class="badge bg-success">Complete</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Improvement Summary</h6>
+                        <div class="progress mb-2">
+                            <div class="progress-bar bg-success" 
+                                 style="width: {{ summary.imputed_percentage }}%"
+                                 role="progressbar">
+                                {{ summary.imputed_percentage|floatformat:1 }}% Complete
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            {{ summary.imputed_rows }} values were successfully imputed with 
+                            {{ summary.quality_score|mul:100|floatformat:1 }}% confidence
+                        </small>
+                    </div>
+                </div>
+                
+                <!-- Statistics Tab -->
+                <div class="tab-pane" id="statistics-tab" style="display: none;">
+                    <h5 class="mb-3">
+                        <i class="bi bi-bar-chart me-2 text-primary"></i>
+                        Statistical Summary
+                    </h5>
+                    
+                    {% if validation_results.column_quality %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Column</th>
+                                    <th>Original Mean</th>
+                                    <th>Imputed Mean</th>
+                                    <th>Quality Score</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for column, metrics in validation_results.column_quality.items %}
+                                <tr>
+                                    <td class="fw-bold">{{ column }}</td>
+                                    <td>{{ metrics.original_mean|floatformat:3 }}</td>
+                                    <td>{{ metrics.imputed_mean|floatformat:3 }}</td>
+                                    <td>
+                                        <span class="metric-value metric-{% if metrics.quality_score >= 0.9 %}excellent{% elif metrics.quality_score >= 0.7 %}good{% elif metrics.quality_score >= 0.5 %}fair{% else %}poor{% endif %}">
+                                            {{ metrics.quality_score|floatformat:3 }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if metrics.quality_score >= 0.8 %}
+                                            <span class="badge bg-success">Excellent</span>
+                                        {% elif metrics.quality_score >= 0.6 %}
+                                            <span class="badge bg-info">Good</span>
+                                        {% elif metrics.quality_score >= 0.4 %}
+                                            <span class="badge bg-warning">Fair</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Poor</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Validation Results -->
+        <div class="validation-panel">
+            <h5 class="text-primary mb-3">
+                <i class="bi bi-shield-check me-2"></i>
+                Quality Assessment
+            </h5>
+            
+            <div class="validation-metric">
+                <span class="metric-label">Overall Quality</span>
+                <span class="metric-value metric-{{ quality_level.level|lower }}">
+                    {{ validation_results.overall_quality|floatformat:3 }}
+                </span>
+            </div>
+            
+            <div class="validation-metric">
+                <span class="metric-label">Imputation Accuracy</span>
+                <span class="metric-value metric-good">
+                    {{ summary.quality_score|mul:100|floatformat:1 }}%
+                </span>
+            </div>
+            
+            <div class="validation-metric">
+                <span class="metric-label">Data Completeness</span>
+                <span class="metric-value metric-excellent">100%</span>
+            </div>
+            
+            <div class="mt-3">
+                <h6>Quality Description</h6>
+                <p class="small text-muted">{{ quality_level.description }}</p>
+            </div>
+        </div>
+        
+        <!-- AI Recommendations -->
+        {% if validation_results.recommendations %}
+        <div class="validation-panel">
+            <h5 class="text-primary mb-3">
+                <i class="bi bi-lightbulb me-2"></i>
+                AI Recommendations
+            </h5>
+            
+            <ul class="recommendations-list">
+                {% for recommendation in validation_results.recommendations %}
+                <li class="recommendation-item {% if '✅' in recommendation %}success{% elif '⚠️' in recommendation %}warning{% elif '❌' in recommendation %}error{% endif %}">
+                    {{ recommendation }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        <!-- Export Options -->
+        <div class="export-actions">
+            <h5 class="text-primary mb-3">
+                <i class="bi bi-download me-2"></i>
+                Export Results
+            </h5>
+            
+            <div class="export-option" data-format="xlsx">
+                <i class="bi bi-file-earmark-excel export-icon"></i>
+                <div>
+                    <h6 class="mb-1">Excel Spreadsheet</h6>
+                    <small>Complete dataset with metadata</small>
+                </div>
+            </div>
+            
+            <div class="export-option" data-format="csv">
+                <i class="bi bi-file-earmark-text export-icon"></i>
+                <div>
+                    <h6 class="mb-1">CSV File</h6>
+                    <small>Data only, compatible with all tools</small>
+                </div>
+            </div>
+            
+            <div class="export-option" data-format="json">
+                <i class="bi bi-file-earmark-code export-icon"></i>
+                <div>
+                    <h6 class="mb-1">JSON Format</h6>
+                    <small>Structured data with validation results</small>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary w-100 mt-3" onclick="exportResults()">
+                <i class="bi bi-download me-1"></i>
+                Download Selected Format
+            </button>
+        </div>
+        
+        <!-- Processing Timeline -->
+        <div class="status-timeline">
+            <h6 class="text-primary mb-3">
+                <i class="bi bi-clock-history me-2"></i>
+                Processing Timeline
+            </h6>
+            
+            <div class="timeline-item">
+                <div class="timeline-icon">
+                    <i class="bi bi-check"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-title">Data Uploaded</div>
+                    <div class="timeline-description">{{ session.uploaded_at|date:"M d, H:i" }}</div>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-icon">
+                    <i class="bi bi-check"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-title">Configuration Set</div>
+                    <div class="timeline-description">{{ summary.simulations_used|floatformat:0 }} simulations, {{ summary.method_used }} method</div>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-icon">
+                    <i class="bi bi-check"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-title">Processing Completed</div>
+                    <div class="timeline-description">{{ result.created_at|date:"M d, H:i" }} ({{ summary.processing_time|floatformat:1 }}s)</div>
+                </div>
+            </div>
+            
+            <div class="timeline-item">
+                <div class="timeline-icon">
+                    <i class="bi bi-check"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-title">Quality Validated</div>
+                    <div class="timeline-description">Score: {{ summary.quality_score|floatformat:3 }} ({{ quality_level.level }})</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="validation-panel">
+            <h6 class="text-primary mb-3">
+                <i class="bi bi-lightning me-2"></i>
+                Quick Actions
+            </h6>
+            
+            <div class="d-grid gap-2">
+                <a href="{% url 'monte_carlo_app:visualization' session.session_id %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-graph-up me-1"></i>
+                    View Visualizations
+                </a>
+                <button class="btn btn-outline-secondary btn-sm" onclick="shareResults()">
+                    <i class="bi bi-share me-1"></i>
+                    Share Results
+                </button>
+                <a href="{% url 'monte_carlo_app:home' %}" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-plus-circle me-1"></i>
+                    Process New File
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a href="{% url 'monte_carlo_app:configure' session.session_id %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>
+                Back to Configure
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'monte_carlo_app:visualization' session.session_id %}" class="btn btn-primary">
+                <i class="bi bi-graph-up me-1"></i>
+                View Visualizations
+            </a>
+            <a href="{% url 'monte_carlo_app:export_results' session.session_id %}" class="btn btn-success">
+                <i class="bi bi-download me-1"></i>
+                Export Results
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal fade" id="successModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Processing Completed!
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-3">
+                    <i class="bi bi-trophy display-4 text-success"></i>
+                </div>
+                <h4>Monte Carlo Imputation Successful!</h4>
+                <p class="text-muted">
+                    Your data has been successfully processed with {{ summary.imputed_rows }} values imputed 
+                    and a quality score of {{ summary.quality_score|floatformat:3 }}.
+                </p>
+                <div class="row text-center mt-4">
+                    <div class="col-4">
+                        <div class="h5 text-primary">{{ summary.processing_time|floatformat:1 }}s</div>
+                        <small class="text-muted">Processing Time</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 text-success">{{ summary.quality_score|mul:100|floatformat:1 }}%</div>
+                        <small class="text-muted">Quality Score</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 text-info">100%</div>
+                        <small class="text-muted">Complete</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="{% url 'monte_carlo_app:visualization' session.session_id %}" class="btn btn-primary">
+                    View Visualizations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let selectedExportFormat = 'xlsx';
+    
+    // Initialize components
+    initializeTabs();
+    initializeExportOptions();
+    
+    // Show success modal if just completed
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('completed') === 'true') {
+        const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+        successModal.show();
+    }
+    
+    function initializeTabs() {
+        const tabs = document.querySelectorAll('.custom-tab');
+        const tabPanes = document.querySelectorAll('.tab-pane');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs and panes
+                tabs.forEach(t => t.classList.remove('active'));
+                tabPanes.forEach(pane => pane.style.display = 'none');
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Show corresponding tab pane
+                const targetTab = this.dataset.tab;
+                const targetPane = document.getElementById(targetTab + '-tab');
+                if (targetPane) {
+                    targetPane.style.display = 'block';
+                }
+                
+                // Load tab-specific content if needed
+                loadTabContent(targetTab);
+            });
+        });
+    }
+    
+    function loadTabContent(tabName) {
+        switch(tabName) {
+            case 'comparison':
+                loadComparisonData();
+                break;
+            case 'statistics':
+                loadStatisticsData();
+                break;
+        }
+    }
+    
+    function loadComparisonData() {
+        // Load comparison visualization if not already loaded
+        const comparisonTab = document.getElementById('comparison-tab');
+        if (!comparisonTab.dataset.loaded) {
+            // Add loading state
+            showTabLoading(comparisonTab);
+            
+            // Simulate data loading
+            setTimeout(() => {
+                hideTabLoading(comparisonTab);
+                comparisonTab.dataset.loaded = 'true';
+            }, 1000);
+        }
+    }
+    
+    function loadStatisticsData() {
+        // Load statistical analysis if not already loaded
+        const statisticsTab = document.getElementById('statistics-tab');
+        if (!statisticsTab.dataset.loaded) {
+            showTabLoading(statisticsTab);
+            
+            // Simulate data loading
+            setTimeout(() => {
+                hideTabLoading(statisticsTab);
+                statisticsTab.dataset.loaded = 'true';
+            }, 1000);
+        }
+    }
+    
+    function showTabLoading(tabElement) {
+        const loadingHtml = `
+            <div class="text-center py-5 tab-loading">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div class="text-muted">Loading data...</div>
+            </div>
+        `;
+        tabElement.insertAdjacentHTML('afterbegin', loadingHtml);
+    }
+    
+    function hideTabLoading(tabElement) {
+        const loading = tabElement.querySelector('.tab-loading');
+        if (loading) {
+            loading.remove();
+        }
+    }
+    
+    function initializeExportOptions() {
+        const exportOptions = document.querySelectorAll('.export-option');
+        
+        exportOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selection from all options
+                exportOptions.forEach(opt => opt.classList.remove('selected'));
+                
+                // Select current option
+                this.classList.add('selected');
+                selectedExportFormat = this.dataset.format;
+                
+                showToast(`Selected ${this.dataset.format.toUpperCase()} format`, 'success');
+            });
+        });
+        
+        // Set default selection
+        document.querySelector('.export-option[data-format="xlsx"]').classList.add('selected');
+    }
+    
+    // Global functions
+    window.downloadFullDataset = function() {
+        showLoading();
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.href = `{% url 'monte_carlo_app:download_file' session.session_id 'xlsx' %}`;
+        link.download = '{{ session.file_name }}_imputed.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        hideLoading();
+        showToast('Download started successfully!', 'success');
+    };
+    
+    window.exportResults = function() {
+        if (!selectedExportFormat) {
+            showToast('Please select an export format first', 'error');
+            return;
+        }
+        
+        showLoading();
+        
+        // Redirect to export page with selected format
+        window.location.href = `{% url 'monte_carlo_app:export_results' session.session_id %}?format=${selectedExportFormat}`;
+    };
+    
+    window.shareResults = function() {
+        const shareData = {
+            title: 'Monte Carlo Imputation Results',
+            text: `Data processing completed with ${{{ summary.quality_score|mul:100|floatformat:1 }}}% quality score. {{ summary.imputed_rows }} values were successfully imputed.`,
+            url: window.location.href
+        };
+        
+        if (navigator.share) {
+            navigator.share(shareData).then(() => {
+                showToast('Results shared successfully!', 'success');
+            }).catch(() => {
+                fallbackShare(shareData);
+            });
+        } else {
+            fallbackShare(shareData);
+        }
+    };
+    
+    function fallbackShare(shareData) {
+        // Copy to clipboard as fallback
+        const textToCopy = `${shareData.title}\n${shareData.text}\n${shareData.url}`;
+        
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showToast('Results information copied to clipboard!', 'success');
+        }).catch(() => {
+            showToast('Unable to share results', 'error');
+        });
+    }
+    
+    // Table interactions
+    const tableRows = document.querySelectorAll('.results-table tbody tr');
+    tableRows.forEach(row => {
+        row.addEventListener('click', function() {
+            // Highlight clicked row
+            tableRows.forEach(r => r.classList.remove('table-active'));
+            this.classList.add('table-active');
+            
+            // Show row details
+            showRowDetails(this);
+        });
+    });
+    
+    function showRowDetails(row) {
+        const rowData = [];
+        const cells = row.querySelectorAll('td');
+        const headers = document.querySelectorAll('.results-table th');
+        
+        cells.forEach((cell, index) => {
+            if (index > 0 && index < cells.length - 1) { // Skip row number and status
+                const header = headers[index].textContent.trim();
+                const value = cell.textContent.trim();
+                const isImputed = cell.classList.contains('imputed-cell');
+                
+                rowData.push({
+                    column: header,
+                    value: value,
+                    imputed: isImputed
+                });
+            }
+        });
+        
+        // Show details in a modal or sidebar
+        displayRowDetails(rowData);
+    }
+    
+    function displayRowDetails(rowData) {
+        const detailsHtml = rowData.map(item => `
+            <div class="mb-2">
+                <strong>${item.column}:</strong> 
+                <span class="${item.imputed ? 'text-success fw-bold' : ''}">${item.value}</span>
+                ${item.imputed ? '<i class="bi bi-star-fill text-warning ms-1" title="Imputed value"></i>' : ''}
+            </div>
+        `).join('');
+        
+        // Create a temporary modal or use existing one
+        const existingModal = document.getElementById('rowDetailsModal');
+        if (existingModal) {
+            existingModal.querySelector('.modal-body').innerHTML = detailsHtml;
+            new bootstrap.Modal(existingModal).show();
+        } else {
+            // Create inline details display
+            showToast('Row details loaded', 'info');
+        }
+    }
+    
+    // Quality score animation
+    const qualityScores = document.querySelectorAll('.metric-value');
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                animateValue(entry.target);
+            }
+        });
+    });
+    
+    qualityScores.forEach(score => {
+        observer.observe(score);
+    });
+    
+    function animateValue(element) {
+        const finalValue = parseFloat(element.textContent);
+        const duration = 1500;
+        const startTime = performance.now();
+        
+        function updateValue(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            const currentValue = finalValue * progress;
+            element.textContent = currentValue.toFixed(3);
+            
+            if (progress < 1) {
+                requestAnimationFrame(updateValue);
+            }
+        }
+        
+        element.textContent = '0.000';
+        requestAnimationFrame(updateValue);
+    }
+    
+    // Auto-refresh for real-time updates (if processing is still ongoing)
+    const processingStatus = '{{ session.processing_status }}';
+    if (processingStatus === 'processing') {
+        const refreshInterval = setInterval(() => {
+            fetch(`{% url 'monte_carlo_app:process_status_ajax' session.session_id %}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.status.processing_complete) {
+                        clearInterval(refreshInterval);
+                        location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Status check failed:', error);
+                });
+        }, 5000);
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case 's':
+                    e.preventDefault();
+                    exportResults();
+                    break;
+                case 'v':
+                    e.preventDefault();
+                    window.location.href = "{% url 'monte_carlo_app:visualization' session.session_id %}";
+                    break;
+            }
+        }
+    });
+    
+    // Initialize tooltips for all elements
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

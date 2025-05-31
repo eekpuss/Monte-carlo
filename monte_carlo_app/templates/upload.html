@@ -1,0 +1,681 @@
+{% extends 'monte_carlo_app/base.html' %}
+{% load static %}
+
+{% block title %}Upload Data - Monte Carlo Imputation{% endblock %}
+
+{% block breadcrumb %}
+{{ block.super }}
+<li class="breadcrumb-item active">Upload Data</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .upload-zone {
+        border: 3px dashed #dee2e6;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .upload-zone:hover,
+    .upload-zone.dragover {
+        border-color: var(--bs-primary);
+        background: linear-gradient(135deg, #e7f3ff 0%, #cce7ff 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(13, 110, 253, 0.15);
+    }
+    
+    .upload-zone.dragover::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(13, 110, 253, 0.1);
+        z-index: 1;
+    }
+    
+    .upload-icon {
+        font-size: 4rem;
+        color: var(--bs-primary);
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease;
+    }
+    
+    .upload-zone:hover .upload-icon {
+        transform: scale(1.1);
+    }
+    
+    .file-input {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        z-index: 2;
+    }
+    
+    .file-formats {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .format-badge {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .format-badge:hover {
+        border-color: var(--bs-primary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .progress-container {
+        display: none;
+        margin-top: 1rem;
+    }
+    
+    .file-preview {
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        margin-top: 1rem;
+        display: none;
+    }
+    
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: transform 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    .recent-sessions-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .session-item {
+        padding: 1rem;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .session-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .session-item:last-child {
+        border-bottom: none;
+    }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .hero-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 20px;
+        padding: 3rem 2rem;
+        margin-bottom: 2rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+        animation: float 20s infinite linear;
+        z-index: 1;
+    }
+    
+    .hero-content {
+        position: relative;
+        z-index: 2;
+    }
+    
+    @keyframes float {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(-60px, -60px); }
+    }
+    
+    .feature-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .feature-icon {
+        font-size: 2.5rem;
+        color: var(--bs-primary);
+        margin-bottom: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+        .hero-section {
+            padding: 2rem 1rem;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="hero-content">
+        <h1 class="display-4 fw-bold mb-3">
+            <i class="bi bi-graph-up-arrow me-3"></i>
+            Monte Carlo Time Series Imputation
+        </h1>
+        <p class="lead mb-4">
+            Transform incomplete time series data into actionable insights using advanced Monte Carlo simulation techniques.
+        </p>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="d-flex justify-content-center gap-4 text-center">
+                    <div>
+                        <i class="bi bi-lightning-charge display-6"></i>
+                        <div class="small">Fast Processing</div>
+                    </div>
+                    <div>
+                        <i class="bi bi-shield-check display-6"></i>
+                        <div class="small">High Accuracy</div>
+                    </div>
+                    <div>
+                        <i class="bi bi-graph-up display-6"></i>
+                        <div class="small">Smart Analysis</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Upload Section -->
+    <div class="col-lg-8">
+        <div class="content-card p-4 mb-4">
+            <h3 class="mb-4">
+                <i class="bi bi-cloud-upload text-primary me-2"></i>
+                Upload Your Data
+            </h3>
+            
+            <!-- Upload Form -->
+            <form method="post" enctype="multipart/form-data" id="uploadForm">
+                {% csrf_token %}
+                
+                <!-- Drag & Drop Zone -->
+                <div class="upload-zone p-5 text-center" id="uploadZone">
+                    <input type="file" 
+                           name="file" 
+                           id="fileInput" 
+                           class="file-input"
+                           accept=".xlsx,.xls,.ods"
+                           required>
+                    
+                    <div class="upload-content">
+                        <i class="bi bi-cloud-arrow-up upload-icon"></i>
+                        <h4 class="mb-3">Drag & Drop Your File Here</h4>
+                        <p class="text-muted mb-3">or click to browse files</p>
+                        
+                        <!-- Supported Formats -->
+                        <div class="file-formats">
+                            <div class="format-badge">
+                                <i class="bi bi-file-earmark-excel text-success me-1"></i>
+                                <small>Excel (.xlsx)</small>
+                            </div>
+                            <div class="format-badge">
+                                <i class="bi bi-file-earmark-spreadsheet text-info me-1"></i>
+                                <small>Excel (.xls)</small>
+                            </div>
+                            <div class="format-badge">
+                                <i class="bi bi-file-earmark-text text-warning me-1"></i>
+                                <small>OpenDocument (.ods)</small>
+                            </div>
+                        </div>
+                        
+                        <small class="text-muted d-block mt-3">
+                            Maximum file size: 50MB
+                        </small>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="progress-container" id="progressContainer">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small text-muted">Uploading...</span>
+                        <span class="small text-muted" id="progressText">0%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             id="progressBar" 
+                             role="progressbar" 
+                             style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <!-- File Preview -->
+                <div class="file-preview" id="filePreview">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <i class="bi bi-file-earmark-excel text-success" style="font-size: 2rem;"></i>
+                        </div>
+                        <div class="col">
+                            <h6 class="mb-1" id="fileName">Selected File</h6>
+                            <small class="text-muted" id="fileSize">File size</small>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="removeFile">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sheet Selection -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <label for="{{ form.sheet_name.id_for_label }}" class="form-label">
+                            <i class="bi bi-layers me-1"></i>
+                            {{ form.sheet_name.label }}
+                        </label>
+                        {{ form.sheet_name }}
+                        {% if form.sheet_name.help_text %}
+                            <div class="form-text">{{ form.sheet_name.help_text }}</div>
+                        {% endif %}
+                        {% if form.sheet_name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.sheet_name.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Submit Button -->
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+                        <i class="bi bi-arrow-right-circle me-2"></i>
+                        Analyze Data
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Upload Guidelines -->
+            <div class="mt-4 p-3 bg-light rounded">
+                <h6 class="text-primary mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Upload Guidelines
+                </h6>
+                <ul class="mb-0 small">
+                    <li>Ensure your data has column headers in the first row</li>
+                    <li>Time series data should have a date/time column</li>
+                    <li>Missing values can be empty cells or common placeholders (NA, NULL, etc.)</li>
+                    <li>Numeric columns should contain only numbers or missing values</li>
+                    <li>For best results, include at least 50+ data points</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Features Section -->
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="bi bi-cpu feature-icon"></i>
+                    <h5>Advanced Algorithm</h5>
+                    <p class="text-muted small">
+                        Monte Carlo simulation with adaptive distribution fitting for accurate imputation.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="bi bi-clock-history feature-icon"></i>
+                    <h5>Time-Aware</h5>
+                    <p class="text-muted small">
+                        Preserves temporal patterns and trends in your time series data.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="bi bi-graph-up feature-icon"></i>
+                    <h5>Quality Metrics</h5>
+                    <p class="text-muted small">
+                        Comprehensive validation and quality assessment of imputation results.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Quick Stats -->
+        <div class="stats-card mb-4">
+            <h5 class="mb-3">
+                <i class="bi bi-bar-chart me-2"></i>
+                Quick Stats
+            </h5>
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="h3 mb-1">{{ stats.total_sessions|default:0 }}</div>
+                    <small>Total Sessions</small>
+                </div>
+                <div class="col-6">
+                    <div class="h3 mb-1">{{ stats.total_processed|default:0 }}</div>
+                    <small>Processed Files</small>
+                </div>
+            </div>
+            <hr class="my-3" style="border-color: rgba(255,255,255,0.3);">
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="h4 mb-1">{{ stats.success_rate|default:"--" }}%</div>
+                    <small>Success Rate</small>
+                </div>
+                <div class="col-6">
+                    <div class="h4 mb-1">{{ stats.avg_quality|default:"--" }}</div>
+                    <small>Avg Quality</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Sessions -->
+        {% if recent_sessions %}
+        <div class="recent-sessions-card">
+            <div class="p-3 border-bottom bg-light">
+                <h6 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Recent Sessions
+                </h6>
+            </div>
+            <div class="sessions-list">
+                {% for session in recent_sessions %}
+                <div class="session-item" onclick="window.location.href='{% if session.is_processed %}{% url 'monte_carlo_app:view_results' session.session_id %}{% else %}{% url 'monte_carlo_app:preview_data' session.session_id %}{% endif %}'">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">{{ session.file_name|truncatechars:25 }}</h6>
+                            <small class="text-muted">
+                                <i class="bi bi-calendar me-1"></i>
+                                {{ session.uploaded_at|date:"M d, H:i" }}
+                            </small>
+                        </div>
+                        <div class="ms-2">
+                            {% if session.processing_status == 'completed' %}
+                                <span class="status-badge bg-success text-white">Completed</span>
+                            {% elif session.processing_status == 'processing' %}
+                                <span class="status-badge bg-warning text-dark">Processing</span>
+                            {% elif session.processing_status == 'error' %}
+                                <span class="status-badge bg-danger text-white">Error</span>
+                            {% else %}
+                                <span class="status-badge bg-primary text-white">{{ session.get_processing_status_display }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if session.total_rows %}
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-table me-1"></i>
+                            {{ session.total_rows }} rows, {{ session.total_columns }} columns
+                            {% if session.get_total_missing_values > 0 %}
+                                | <i class="bi bi-exclamation-triangle me-1"></i>{{ session.get_total_missing_values }} missing
+                            {% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="p-3 bg-light text-center border-top">
+                <a href="{% url 'monte_carlo_app:session_list' %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-list-ul me-1"></i>
+                    View All Sessions
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Help Card -->
+        <div class="content-card p-3 mt-4">
+            <h6 class="text-primary mb-2">
+                <i class="bi bi-question-circle me-1"></i>
+                Need Help?
+            </h6>
+            <p class="small text-muted mb-3">
+                Check our documentation for detailed guides on data preparation and best practices.
+            </p>
+            <div class="d-grid gap-2">
+                <a href="{% url 'monte_carlo_app:help_page' %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-book me-1"></i>
+                    Documentation
+                </a>
+                <a href="{% url 'monte_carlo_app:about_page' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-info-circle me-1"></i>
+                    About Algorithm
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const removeFile = document.getElementById('removeFile');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const uploadForm = document.getElementById('uploadForm');
+    
+    // Drag and drop functionality
+    uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelect(files[0]);
+        }
+    });
+    
+    // File input change
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+    
+    // Remove file
+    removeFile.addEventListener('click', function() {
+        fileInput.value = '';
+        filePreview.style.display = 'none';
+        submitBtn.disabled = true;
+        uploadZone.style.display = 'block';
+    });
+    
+    // Handle file selection
+    function handleFileSelect(file) {
+        // Validate file type
+        const allowedTypes = ['.xlsx', '.xls', '.ods'];
+        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+        
+        if (!allowedTypes.includes(fileExtension)) {
+            showToast('Please select a valid Excel or ODS file.', 'error');
+            return;
+        }
+        
+        // Validate file size (50MB)
+        if (file.size > 50 * 1024 * 1024) {
+            showToast('File size cannot exceed 50MB.', 'error');
+            return;
+        }
+        
+        // Show file preview
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        filePreview.style.display = 'block';
+        uploadZone.style.display = 'none';
+        submitBtn.disabled = false;
+        
+        // Update file icon based on type
+        const fileIcon = filePreview.querySelector('i');
+        if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+            fileIcon.className = 'bi bi-file-earmark-excel text-success';
+        } else {
+            fileIcon.className = 'bi bi-file-earmark-text text-warning';
+        }
+        
+        showToast('File selected successfully!', 'success');
+    }
+    
+    // Format file size
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Form submission with progress
+    uploadForm.addEventListener('submit', function(e) {
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            showToast('Please select a file first.', 'error');
+            return;
+        }
+        
+        // Show progress
+        submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Analyzing...';
+        submitBtn.disabled = true;
+        progressContainer.style.display = 'block';
+        
+        // Simulate progress (since we can't track actual upload progress in this setup)
+        let progress = 0;
+        const interval = setInterval(function() {
+            progress += Math.random() * 15;
+            if (progress > 90) progress = 90;
+            
+            progressBar.style.width = progress + '%';
+            progressText.textContent = Math.round(progress) + '%';
+        }, 200);
+        
+        // Clear interval when form actually submits
+        setTimeout(function() {
+            clearInterval(interval);
+        }, 2000);
+    });
+    
+    // Real-time file validation
+    fileInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            // AJAX validation could be added here
+            validateFileAjax(file);
+        }
+    });
+    
+    // AJAX file validation (optional enhancement)
+    function validateFileAjax(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        fetch('{% url "monte_carlo_app:validate_file_ajax" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.valid) {
+                showToast('File validation passed!', 'success');
+            } else {
+                showToast('File validation failed: ' + data.error, 'error');
+                fileInput.value = '';
+                filePreview.style.display = 'none';
+                uploadZone.style.display = 'block';
+                submitBtn.disabled = true;
+            }
+        })
+        .catch(error => {
+            console.error('Validation error:', error);
+        });
+    }
+    
+    // Click on upload zone to trigger file input
+    uploadZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+    
+    // Prevent default click behavior on file input
+    fileInput.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+});
+</script>
+{% endblock %}

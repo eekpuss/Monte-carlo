@@ -1,0 +1,761 @@
+{% extends 'monte_carlo_app/base.html' %}
+{% load static %}
+
+{% block title %}Data Preview - {{ session.file_name }}{% endblock %}
+
+{% block breadcrumb %}
+{{ block.super }}
+<li class="breadcrumb-item">
+    <a href="{% url 'monte_carlo_app:home' %}" class="text-decoration-none">Upload</a>
+</li>
+<li class="breadcrumb-item active">Preview Data</li>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .data-summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .summary-stat {
+        text-align: center;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease;
+    }
+    
+    .summary-stat:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .quality-score {
+        font-size: 2.5rem;
+        font-weight: bold;
+        line-height: 1;
+    }
+    
+    .quality-excellent { color: #28a745; }
+    .quality-good { color: #17a2b8; }
+    .quality-fair { color: #ffc107; }
+    .quality-poor { color: #dc3545; }
+    
+    .data-table-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .table-header {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 1rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .data-table {
+        margin: 0;
+        font-size: 0.9rem;
+    }
+    
+    .data-table th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .data-table td {
+        white-space: nowrap;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .missing-value {
+        background-color: #ffe6e6 !important;
+        color: #721c24;
+        font-style: italic;
+        position: relative;
+    }
+    
+    .missing-value::after {
+        content: '⚠';
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #dc3545;
+        font-size: 0.8rem;
+    }
+    
+    .column-type-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+        border-radius: 10px;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+    
+    .type-numeric {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .type-text {
+        background: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .type-datetime {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .column-analysis-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .column-item {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.3s ease;
+    }
+    
+    .column-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .column-item:last-child {
+        border-bottom: none;
+    }
+    
+    .missing-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+    }
+    
+    .missing-none { background: #28a745; }
+    .missing-low { background: #ffc107; }
+    .missing-medium { background: #fd7e14; }
+    .missing-high { background: #dc3545; }
+    
+    .time-candidate-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 2px solid #2196f3;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .time-candidate-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+    }
+    
+    .confidence-bar {
+        height: 4px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+    
+    .confidence-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+        transition: width 0.3s ease;
+    }
+    
+    .action-buttons {
+        position: sticky;
+        bottom: 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        padding: 1rem;
+        z-index: 100;
+    }
+    
+    .table-scroll {
+        max-height: 600px;
+        overflow-y: auto;
+        position: relative;
+    }
+    
+    .pagination-info {
+        background: #f8f9fa;
+        padding: 0.5rem 1rem;
+        border-top: 1px solid #dee2e6;
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    @media (max-width: 768px) {
+        .data-table {
+            font-size: 0.8rem;
+        }
+        
+        .data-table td {
+            max-width: 120px;
+        }
+        
+        .action-buttons {
+            position: relative;
+            bottom: auto;
+            margin-top: 1rem;
+        }
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .file-info-badge {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        display: inline-block;
+        margin: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Data Summary Dashboard -->
+<div class="data-summary-card">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <h3 class="mb-1">
+                <i class="bi bi-file-earmark-spreadsheet me-2"></i>
+                {{ session.file_name }}
+            </h3>
+            <p class="mb-3">Uploaded {{ session.uploaded_at|date:"M d, Y \a\t H:i" }}</p>
+            
+            <!-- File Info Badges -->
+            <div class="mb-3">
+                <span class="file-info-badge">
+                    <i class="bi bi-hdd me-1"></i>
+                    {{ session.file_size|filesizeformat }}
+                </span>
+                <span class="file-info-badge">
+                    <i class="bi bi-layers me-1"></i>
+                    Sheet: {{ session.sheet_name }}
+                </span>
+                {% if session.time_column %}
+                <span class="file-info-badge">
+                    <i class="bi bi-clock me-1"></i>
+                    Time Column: {{ session.time_column }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stats-grid">
+                <div class="summary-stat">
+                    <div class="h4 mb-1">{{ session.total_rows|floatformat:0 }}</div>
+                    <small>Total Rows</small>
+                </div>
+                <div class="summary-stat">
+                    <div class="h4 mb-1">{{ session.total_columns }}</div>
+                    <small>Columns</small>
+                </div>
+                <div class="summary-stat">
+                    <div class="h4 mb-1">{{ total_missing|floatformat:0 }}</div>
+                    <small>Missing Values</small>
+                </div>
+                <div class="summary-stat">
+                    <div class="quality-score {% if data_quality.score >= 0.9 %}quality-excellent{% elif data_quality.score >= 0.7 %}quality-good{% elif data_quality.score >= 0.5 %}quality-fair{% else %}quality-poor{% endif %}">
+                        {{ data_quality.score|floatformat:1 }}
+                    </div>
+                    <small>Data Quality</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Data Preview -->
+    <div class="col-lg-8">
+        <div class="data-table-container">
+            <div class="table-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-table me-2"></i>
+                        Data Preview
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-primary">{{ session.total_rows }} rows</span>
+                        <span class="badge bg-secondary">{{ session.total_columns }} columns</span>
+                        {% if total_missing > 0 %}
+                        <span class="badge bg-warning text-dark">{{ total_missing }} missing</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-scroll">
+                <table class="table table-hover data-table">
+                    <thead>
+                        <tr>
+                            <th scope="col" style="width: 60px;">#</th>
+                            {% for column in column_names %}
+                            <th scope="col">
+                                {{ column }}
+                                {% if column in numeric_columns %}
+                                    <span class="column-type-badge type-numeric">NUM</span>
+                                {% elif column in data_types and 'datetime' in data_types|lookup:column %}
+                                    <span class="column-type-badge type-datetime">DATE</span>
+                                {% else %}
+                                    <span class="column-type-badge type-text">TEXT</span>
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in data_preview %}
+                        <tr>
+                            <td class="fw-bold text-muted">{{ forloop.counter }}</td>
+                            {% for column in column_names %}
+                            <td {% if row|lookup:column == '' or row|lookup:column == None %}class="missing-value" title="Missing value"{% endif %}>
+                                {% if row|lookup:column == '' or row|lookup:column == None %}
+                                    <em>Missing</em>
+                                {% else %}
+                                    {{ row|lookup:column|truncatechars:30 }}
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination-info d-flex justify-content-between align-items-center">
+                <span>Showing first 20 rows of {{ session.total_rows }} total rows</span>
+                <a href="{% url 'monte_carlo_app:edit_data' session.session_id %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-pencil me-1"></i>
+                    Edit Full Data
+                </a>
+            </div>
+        </div>
+        
+        <!-- Statistical Summary -->
+        {% if numeric_summary %}
+        <div class="content-card p-4 mt-4">
+            <h5 class="mb-3">
+                <i class="bi bi-graph-up text-primary me-2"></i>
+                Statistical Summary (Numeric Columns)
+            </h5>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Column</th>
+                            <th>Count</th>
+                            <th>Mean</th>
+                            <th>Std</th>
+                            <th>Min</th>
+                            <th>25%</th>
+                            <th>50%</th>
+                            <th>75%</th>
+                            <th>Max</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for column, stats in numeric_summary.items %}
+                        <tr>
+                            <td class="fw-bold">{{ column }}</td>
+                            <td>{{ stats.count|floatformat:0 }}</td>
+                            <td>{{ stats.mean|floatformat:2 }}</td>
+                            <td>{{ stats.std|floatformat:2 }}</td>
+                            <td>{{ stats.min|floatformat:2 }}</td>
+                            <td>{{ stats.25%|floatformat:2 }}</td>
+                            <td>{{ stats.50%|floatformat:2 }}</td>
+                            <td>{{ stats.75%|floatformat:2 }}</td>
+                            <td>{{ stats.max|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Sidebar Analysis -->
+    <div class="col-lg-4">
+        <!-- Column Analysis -->
+        <div class="column-analysis-card mb-4">
+            <div class="p-3 bg-light border-bottom">
+                <h6 class="mb-0">
+                    <i class="bi bi-list-columns-reverse me-2"></i>
+                    Column Analysis
+                </h6>
+            </div>
+            <div class="column-list">
+                {% for column in column_names %}
+                <div class="column-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">{{ column }}</h6>
+                            <div class="d-flex align-items-center">
+                                {% with missing_count=missing_values|lookup:column %}
+                                {% if missing_count == 0 %}
+                                    <span class="missing-indicator missing-none" title="No missing values"></span>
+                                    <small class="text-success">Complete</small>
+                                {% elif missing_count <= session.total_rows|mul:0.05 %}
+                                    <span class="missing-indicator missing-low" title="Low missing values"></span>
+                                    <small class="text-warning">{{ missing_count }} missing ({{ missing_count|div:session.total_rows|mul:100|floatformat:1 }}%)</small>
+                                {% elif missing_count <= session.total_rows|mul:0.20 %}
+                                    <span class="missing-indicator missing-medium" title="Medium missing values"></span>
+                                    <small class="text-warning">{{ missing_count }} missing ({{ missing_count|div:session.total_rows|mul:100|floatformat:1 }}%)</small>
+                                {% else %}
+                                    <span class="missing-indicator missing-high" title="High missing values"></span>
+                                    <small class="text-danger">{{ missing_count }} missing ({{ missing_count|div:session.total_rows|mul:100|floatformat:1 }}%)</small>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                        <div class="ms-2">
+                            {% if column in numeric_columns %}
+                                <span class="column-type-badge type-numeric">NUM</span>
+                            {% elif column in data_types and 'datetime' in data_types|lookup:column %}
+                                <span class="column-type-badge type-datetime">DATE</span>
+                            {% else %}
+                                <span class="column-type-badge type-text">TEXT</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Time Column Candidates -->
+        {% if time_candidates %}
+        <div class="content-card p-4 mb-4">
+            <h6 class="text-primary mb-3">
+                <i class="bi bi-clock-history me-2"></i>
+                Potential Time Columns
+            </h6>
+            {% for candidate in time_candidates %}
+            <div class="time-candidate-card" data-column="{{ candidate.column }}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">{{ candidate.column }}</h6>
+                        <small class="text-muted">{{ candidate.reason }}</small>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: {{ candidate.confidence|mul:100 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="ms-2">
+                        <span class="badge bg-primary">{{ candidate.confidence|mul:100|floatformat:0 }}%</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Time columns help preserve temporal patterns during imputation.
+            </small>
+        </div>
+        {% endif %}
+        
+        <!-- Data Quality Assessment -->
+        <div class="content-card p-4 mb-4">
+            <h6 class="text-primary mb-3">
+                <i class="bi bi-shield-check me-2"></i>
+                Data Quality Assessment
+            </h6>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="small">Overall Quality</span>
+                    <span class="small fw-bold">{{ data_quality.level }}</span>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar {% if data_quality.score >= 0.9 %}bg-success{% elif data_quality.score >= 0.7 %}bg-info{% elif data_quality.score >= 0.5 %}bg-warning{% else %}bg-danger{% endif %}" 
+                         style="width: {{ data_quality.score|mul:100 }}%"></div>
+                </div>
+            </div>
+            
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="small text-muted">Completeness</div>
+                    <div class="fw-bold">{{ data_quality.score|mul:100|floatformat:1 }}%</div>
+                </div>
+                <div class="col-6">
+                    <div class="small text-muted">Missing Data</div>
+                    <div class="fw-bold">{{ data_quality.missing_percentage|floatformat:1 }}%</div>
+                </div>
+            </div>
+            
+            <hr class="my-3">
+            
+            <div class="small">
+                <div class="mb-2">
+                    <i class="bi bi-check-circle text-success me-1"></i>
+                    <strong>{{ session.total_rows|sub:missing_values|sum_values }}</strong> complete values
+                </div>
+                <div class="mb-2">
+                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                    <strong>{{ total_missing }}</strong> missing values
+                </div>
+                <div>
+                    <i class="bi bi-graph-up text-info me-1"></i>
+                    <strong>{{ numeric_columns|length }}</strong> numeric columns for imputation
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="content-card p-4">
+            <h6 class="text-primary mb-3">
+                <i class="bi bi-lightning me-2"></i>
+                Quick Actions
+            </h6>
+            <div class="d-grid gap-2">
+                <a href="{% url 'monte_carlo_app:edit_data' session.session_id %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-pencil me-1"></i>
+                    Edit Data
+                </a>
+                <button class="btn btn-outline-secondary btn-sm" onclick="downloadSample()">
+                    <i class="bi bi-download me-1"></i>
+                    Download Sample
+                </button>
+                <a href="{% url 'monte_carlo_app:home' %}" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>
+                    Upload Different File
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons (Sticky) -->
+<div class="action-buttons">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-info-circle text-primary me-2"></i>
+                <small class="text-muted">
+                    Data looks good? Proceed to configure imputation parameters.
+                </small>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{% url 'monte_carlo_app:edit_data' session.session_id %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-pencil me-1"></i>
+                    Edit Data
+                </a>
+                <a href="{% url 'monte_carlo_app:confirm_data' session.session_id %}" class="btn btn-primary">
+                    <i class="bi bi-check-circle me-1"></i>
+                    Confirm & Continue
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Time column selection
+    const timeCandidates = document.querySelectorAll('.time-candidate-card');
+    let selectedTimeColumn = null;
+    
+    timeCandidates.forEach(card => {
+        card.addEventListener('click', function() {
+            // Remove previous selection
+            timeCandidates.forEach(c => c.classList.remove('border-success'));
+            
+            // Select current
+            this.classList.add('border-success');
+            selectedTimeColumn = this.dataset.column;
+            
+            showToast(`Selected "${selectedTimeColumn}" as time column`, 'success');
+            
+            // Store in session storage for next step
+            sessionStorage.setItem('selectedTimeColumn', selectedTimeColumn);
+        });
+    });
+    
+    // Table cell tooltip for truncated values
+    const tableCells = document.querySelectorAll('.data-table td');
+    tableCells.forEach(cell => {
+        const text = cell.textContent.trim();
+        if (text.length > 25 && !cell.classList.contains('missing-value')) {
+            cell.setAttribute('title', text);
+            cell.setAttribute('data-bs-toggle', 'tooltip');
+        }
+    });
+    
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Column analysis interactions
+    const columnItems = document.querySelectorAll('.column-item');
+    columnItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const columnName = this.querySelector('h6').textContent.trim();
+            highlightColumn(columnName);
+        });
+    });
+    
+    function highlightColumn(columnName) {
+        // Remove previous highlights
+        document.querySelectorAll('.table th, .table td').forEach(cell => {
+            cell.classList.remove('table-warning');
+        });
+        
+        // Find column index
+        const headers = document.querySelectorAll('.table th');
+        let columnIndex = -1;
+        headers.forEach((header, index) => {
+            if (header.textContent.includes(columnName)) {
+                columnIndex = index;
+                header.classList.add('table-warning');
+            }
+        });
+        
+        // Highlight column cells
+        if (columnIndex >= 0) {
+            const rows = document.querySelectorAll('.table tbody tr');
+            rows.forEach(row => {
+                const cell = row.children[columnIndex];
+                if (cell) {
+                    cell.classList.add('table-warning');
+                }
+            });
+            
+            showToast(`Highlighted column: ${columnName}`, 'info');
+        }
+    }
+    
+    // Auto-scroll to missing values
+    const missingCells = document.querySelectorAll('.missing-value');
+    if (missingCells.length > 0) {
+        let missingIndex = 0;
+        
+        window.highlightNextMissing = function() {
+            if (missingIndex < missingCells.length) {
+                missingCells[missingIndex].scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+                missingCells[missingIndex].style.animation = 'pulse 1s';
+                missingIndex++;
+                
+                if (missingIndex >= missingCells.length) {
+                    missingIndex = 0;
+                }
+            }
+        };
+    }
+    
+    // Data quality progress animation
+    const progressBars = document.querySelectorAll('.progress-bar');
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const bar = entry.target;
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.transition = 'width 1s ease-in-out';
+                    bar.style.width = width;
+                }, 100);
+            }
+        });
+    });
+    
+    progressBars.forEach(bar => observer.observe(bar));
+    
+    // Download sample functionality
+    window.downloadSample = function() {
+        const data = [];
+        const headers = [];
+        
+        // Get headers
+        document.querySelectorAll('.data-table th').forEach((th, index) => {
+            if (index > 0) { // Skip row number column
+                headers.push(th.textContent.trim().split('\n')[0]); // Remove badge text
+            }
+        });
+        
+        // Get data rows
+        document.querySelectorAll('.data-table tbody tr').forEach(row => {
+            const rowData = {};
+            row.querySelectorAll('td').forEach((td, index) => {
+                if (index > 0) { // Skip row number column
+                    const cellValue = td.classList.contains('missing-value') ? '' : td.textContent.trim();
+                    rowData[headers[index - 1]] = cellValue;
+                }
+            });
+            data.push(rowData);
+        });
+        
+        // Create and download CSV
+        const csv = [
+            headers.join(','),
+            ...data.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'data_sample.csv';
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+        showToast('Sample data downloaded successfully!', 'success');
+    };
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case 'e':
+                    e.preventDefault();
+                    window.location.href = "{% url 'monte_carlo_app:edit_data' session.session_id %}";
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    window.location.href = "{% url 'monte_carlo_app:confirm_data' session.session_id %}";
+                    break;
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
